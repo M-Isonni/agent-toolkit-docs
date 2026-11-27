@@ -1,0 +1,1876 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Agent Toolkit Lite guide</title><style>body{font-family:Segoe UI,Arial,sans-serif;max-width:900px;margin:2em auto;line-height:1.5;color:#222}section{break-before:page}section:first-of-type{break-before:auto}h1,h2,h3,h4{break-after:avoid;page-break-after:avoid}table{border-collapse:collapse;margin:1em 0;font-size:0.85em}td,th{border:1px solid #bbb;padding:4px 5px;vertical-align:top}tr{break-inside:avoid}code,pre{background:#f4f4f4}code{overflow-wrap:anywhere}code.short{white-space:nowrap;overflow-wrap:normal}pre{padding:8px;white-space:pre-wrap}img{max-width:100%}</style></head><body><section id="index"><h1>Agent Toolkit Lite</h1>
+<p>This is Agent Toolkit Lite, the free edition: its Evidence and Enhanced Input tools, the <code class="short">agent_toolkit_lite_view</code> tool
+and its demo map. The full edition, Agent Toolkit, adds nine more domains with the same safety and answers. This guide
+covers what Lite ships.</p>
+<p>Agent Toolkit gives AI agents verified, undoable tools for Unreal Engine 5.8. It adds toolsets for editor domains
+that Epic's Unreal MCP toolsets don't cover, and every tool that changes your project:</p>
+<ul>
+<li>checks that it may touch the target (allowed folders, source control);</li>
+<li>can preview instead of applying (a dry run);</li>
+<li>runs as one undo step (creating an asset or writing a file on disk can't be undone, and the answer says so);</li>
+<li>reads the real result back and reports it, so a step that silently did nothing is reported as failed;</li>
+<li>answers in one compact format, with evidence such as log warnings and thumbnails.</li>
+</ul>
+<p>It works with any MCP client (Claude Code, Cursor, Codex, Epic's AI Assistant) through Epic's own Unreal MCP server.
+It calls no AI model, needs no API key and sends nothing over the network.</p>
+<blockquote>
+<p><strong>Version 1.0.0.</strong> Unreal Engine 5.8, Windows editor; tested on 5.8.4. A 5.9 version is planned after the
+final 5.9 release. What each version changed is in the <a href="#changelog">Changelog</a>.</p>
+</blockquote>
+<h2>Contents</h2>
+<ol>
+<li>Quick start: install, connect your agent, check that it works.</li>
+<li>Try it in the demo map: one station for each kind of tool, with prompts to type.</li>
+<li>Concepts: responses, statuses, error codes, safety.</li>
+<li>What Agent Toolkit adds: measured against an agent without it, with examples.</li>
+<li>One chapter per domain: Evidence, Enhanced Input, and in the full edition Navigation, Smart Objects, Landscape,
+   Foliage, Audio, Animation, World Partition, Cook and packaging, and Profiling. Each ends with a step-by-step
+   tutorial, with screenshots produced by the toolkit itself.</li>
+<li>Settings.</li>
+<li>Troubleshooting.</li>
+<li>FAQ.</li>
+<li>Changelog: what each version changed.</li>
+<li>Tool reference: every tool and parameter, generated from the plugin.</li>
+</ol></section>
+
+<section id="quick-start"><h1>Quick start</h1>
+<h2>1. Install and enable</h2>
+<ol>
+<li>Install Agent Toolkit from Fab and add it to your Unreal Engine 5.8 project.</li>
+<li>Open the project. Agent Toolkit enables what it needs: <strong>Model Context Protocol</strong>, <strong>Toolset Registry</strong> and
+   <strong>Python Editor Script Plugin</strong>. Restart the editor if it asks you to.</li>
+<li>Optional: Epic's own toolsets are separate plugins, off in a new project, and Agent Toolkit doesn't need them. To
+   give your agent those too, enable <strong>EditorToolset</strong> (actors, assets, Blueprints, materials, levels and code mode) in
+   <strong>Edit → Plugins</strong>, or <strong>All Toolsets</strong> for every Epic toolset, and restart the editor. All Toolsets also turns on
+   Epic's Game Features plugin: a project you package then needs a GameFeatureData entry in <strong>Edit → Project Settings →
+   Asset Manager</strong>.</li>
+</ol>
+<h2>2. Start the MCP server</h2>
+<p>Epic's MCP server doesn't start by default.</p>
+<ul>
+<li>For one session: open the console (the <code class="short">~</code> key) and run <code>ModelContextProtocol.StartServer</code>.</li>
+<li>Every time: <strong>Edit → Editor Preferences → General → Model Context Protocol → Auto Start Server</strong>.</li>
+</ul>
+<p>The server listens on <code>http://127.0.0.1:8000/mcp</code>. It only accepts connections from your own machine.</p>
+<p>While your agent works, the editor is usually in the background, where Unreal slows it down and every call waits
+about a third of a second. Turn off <strong>Edit → Editor Preferences → General → Performance → Use Less CPU when in
+Background</strong> so that calls take a few milliseconds.</p>
+<h2>3. Connect your agent</h2>
+<p>Run <code>ModelContextProtocol.GenerateClientConfig ClaudeCode</code> in the console (or <code class="short">Cursor</code>, <code class="short">VSCode</code>, <code class="short">Gemini</code>, <code class="short">Codex</code>,
+<code class="short">All</code>): it writes that client's configuration file in the project folder, <code class="short">.mcp.json</code> for Claude Code. Or add the
+server by hand. For Claude Code, put this <code class="short">.mcp.json</code> in the folder you start Claude Code from:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;unreal&quot;: { &quot;type&quot;: &quot;http&quot;, &quot;url&quot;: &quot;http://127.0.0.1:8000/mcp&quot; }
+  }
+}
+</code></pre>
+<p>Start the Unreal Editor <strong>before</strong> your agent. A client that started first can reconnect: in Claude Code, run <code class="short">/mcp</code>
+and reconnect <code class="short">unreal</code>.</p>
+<h2>4. Tell your agent about Agent Toolkit</h2>
+<p>Agents reach for what they already know. An agent that can also run Python in the editor or edit your files may make
+a change by hand and skip the toolkit's checks, evidence and undo. Add this to your agent's instructions (<code class="short">CLAUDE.md</code>
+for Claude Code, <code class="short">AGENTS.md</code> for Codex, the project rules for Cursor):</p>
+<pre><code class="language-text">This Unreal project has the Agent Toolkit plugin. For changes in the Unreal Editor, use its MCP toolsets (agent_toolkit_lite.*) before Python or editing files: they check the result, can be undone and return evidence. Call a tool through call_tool with the toolset name and the short tool name, for example toolset_name &quot;agent_toolkit_lite.evidence.EvidenceTools&quot; and tool_name &quot;capture_from&quot;. When the editor offers Epic's code mode (the toolset editor_toolset.toolsets.programmatic.ProgrammaticToolset), many similar calls whose answers you don't need one by one can go in one execute_tool_script script: a script calls a tool by its full name, such as agent_toolkit_lite.input.InputTools.map, and each call still checks its result and is its own undo step.
+</code></pre>
+<h2>5. Check that it works</h2>
+<p>Ask your agent to list the Unreal toolsets. You should see <code>agent_toolkit_lite.evidence.EvidenceTools</code> and
+<code>agent_toolkit_lite.input.InputTools</code> (and, in the full edition, the other domains' toolsets), next to Epic's if you enabled
+them. The agent's MCP tool list should also hold <code class="short">agent_toolkit_lite_view</code>, which shows evidence images from Agent Toolkit
+responses.</p>
+<h2>6. Try it in the demo map</h2>
+<p>Open the demo level, AgentToolkitLitePlayground, and try the prompts of <a href="#demo">Try it in the demo map</a>: one
+station for each kind of tool.</p></section>
+
+<section id="demo"><h1>Try it in the demo map</h1>
+<p>The plugin ships a small demo level, <strong>AgentToolkitLitePlayground</strong>, built from engine content only. In the Content Browser,
+open the plugin's content folder under <strong>Plugins</strong>, then <strong>Demo</strong>. If the Plugins folder doesn't show, turn on <strong>Show
+Plugin Content</strong> in the Content Browser's settings.</p>
+<p>The prompts below don't change the level: they read it, make input assets in your project and change its input
+settings. Agent Toolkit never changes plugin content, and the demo map is plugin content, so to build on the level, use
+<strong>File &gt; Save Current Level As</strong> to save a copy in your project's Content folder and work on the copy.</p>
+<h2>The stations</h2>
+<p>Each station's name stands on its spot in 5 m letters.</p>
+<table>
+<thead>
+<tr>
+<th>Station</th>
+<th>What is there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start</td>
+<td>The floor on a wide grey ground, a sun and sky, and the PlayerStart</td>
+</tr>
+<tr>
+<td>Input corner</td>
+<td>A marker ahead of the Start and to its right, where the player can try new input</td>
+</tr>
+</tbody>
+</table>
+<h2>Try it</h2>
+<p>Type these in your MCP client. Each one names the tools the agent will use.</p>
+<h3>Start</h3>
+<ul>
+<li><em>"Check this level for errors, then show me what the player sees."</em> <code class="short">evidence.map_check</code>, <code class="short">evidence.pie_start</code>,
+  <code class="short">evidence.pie_capture</code>, <code class="short">evidence.pie_stop</code>.</li>
+<li><em>"Take a picture of the Input corner from above."</em> <code class="short">evidence.capture_from</code>.</li>
+</ul>
+<h3>Input corner</h3>
+<ul>
+<li><em>"Add a Jump action on the space bar and give it to the player."</em> <code class="short">input.create_action</code>, <code class="short">input.create_context</code>,
+  <code class="short">input.map</code>, <code class="short">input.add_to_player</code>.</li>
+<li><em>"Which input contexts does the player have now?"</em> <code class="short">input.active_contexts</code>.</li>
+</ul>
+<p>The Evidence and Enhanced Input chapters explain each tool's answers and options.</p></section>
+
+<section id="concepts"><h1>Concepts</h1>
+<h2>Responses</h2>
+<p>Every Agent Toolkit tool answers with the same structure, so your agent learns one format:</p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;applied&quot;,
+  &quot;summary&quot;: &quot;Mapped IA_Sprint -&gt; LeftShift in /Game/Input/IMC_Default.&quot;,
+  &quot;changes&quot;: [
+    { &quot;kind&quot;: &quot;modified&quot;, &quot;object&quot;: &quot;/Game/Input/IMC_Default.IMC_Default&quot;, &quot;detail&quot;: &quot;mapped IA_Sprint -&gt; LeftShift&quot; }
+  ],
+  &quot;more&quot;: 0,
+  &quot;evidence&quot;: {
+    &quot;postcheck&quot;: { &quot;passed&quot;: true, &quot;observed&quot;: &quot;IA_Sprint mapped to LeftShift&quot; },
+    &quot;validation&quot;: { &quot;errors&quot;: 0, &quot;warnings&quot;: 0 },
+    &quot;log&quot;: { &quot;errors&quot;: 0, &quot;warnings&quot;: 0, &quot;lines&quot;: [] },
+    &quot;metrics&quot;: { &quot;mappings&quot;: &quot;1&quot;, &quot;duplicate_keys&quot;: &quot;&quot; },
+    &quot;images&quot;: []
+  },
+  &quot;undo&quot;: { &quot;transaction&quot;: &quot;AgentToolkitLite: input.map&quot;, &quot;undoable&quot;: true },
+  &quot;confirmToken&quot;: &quot;&quot;,
+  &quot;jobId&quot;: &quot;&quot;,
+  &quot;error&quot;: { &quot;code&quot;: &quot;&quot;, &quot;message&quot;: &quot;&quot;, &quot;fix&quot;: &quot;&quot; },
+  &quot;report&quot;: &quot;Saved/AgentToolkitLite/Reports/20261023-101502-a1.json&quot;
+}
+</code></pre>
+<p>A typical response is near 300 tokens.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">status</code></td>
+<td><code class="short">applied</code>, <code class="short">previewed</code>, <code class="short">partial</code> or <code class="short">failed</code> (see below)</td>
+</tr>
+<tr>
+<td><code class="short">summary</code></td>
+<td>One line saying what happened</td>
+</tr>
+<tr>
+<td><code class="short">changes</code></td>
+<td>What changed: <code class="short">kind</code> is <code class="short">created</code>, <code class="short">modified</code>, <code class="short">deleted</code> or <code class="short">moved</code>. At most 20 entries (setting <em>Max List Items In Response</em>); <code class="short">more</code> counts the rest</td>
+</tr>
+<tr>
+<td><code class="short">evidence.postcheck</code></td>
+<td>What the tool read back from the real state after the change. <code class="short">applied</code> always means <code class="short">passed: true</code></td>
+</tr>
+<tr>
+<td><code class="short">evidence.validation</code></td>
+<td>Asset validation errors and warnings, when the tool validates</td>
+</tr>
+<tr>
+<td><code class="short">evidence.log</code></td>
+<td>Errors and warnings logged during the call, with up to five lines</td>
+</tr>
+<tr>
+<td><code class="short">evidence.metrics</code></td>
+<td>Numbers specific to the tool, such as coverage or instance counts</td>
+</tr>
+<tr>
+<td><code class="short">evidence.images</code></td>
+<td>Paths of thumbnails and other images. Look at one with the <code class="short">agent_toolkit_lite_view</code> tool</td>
+</tr>
+<tr>
+<td><code class="short">undo</code></td>
+<td>The name of the call's undo step, and whether it can be undone</td>
+</tr>
+<tr>
+<td><code class="short">confirmToken</code></td>
+<td>Set on the preview of a destructive operation. Send it back to apply</td>
+</tr>
+<tr>
+<td><code class="short">jobId</code></td>
+<td>Always empty in Lite: only the full edition's tools start long jobs</td>
+</tr>
+<tr>
+<td><code class="short">error</code></td>
+<td>Set when the status is <code class="short">failed</code>: a code, a message and a fix</td>
+</tr>
+<tr>
+<td><code class="short">report</code></td>
+<td>The full report on disk, with every change, the request and, in <code class="short">details</code>, any list the summary shortens</td>
+</tr>
+</tbody>
+</table>
+<p>A response never grows past <strong>Max Response KB</strong> (24 KB of JSON by default), so one long answer, such as a describe of
+a large project, can't fill an agent's context. Over the limit, the answer is cut in this order, each step only while it
+is still too long:</p>
+<ol>
+<li>A summary over 1 KB keeps the lines that fit and ends with "N KB left out: the whole answer is in &lt;files&gt; (read them
+   with any file tool, or Epic's read_file)." The files are <code class="short">&lt;report&gt;.part-1.txt</code>, <code class="short">&lt;report&gt;.part-2.txt</code> and so on, next
+   to the report, each at most 64 KB and cut at line ends, which Epic's <code class="short">read_file</code> tool (EditorToolset plugin) reads.
+   Together they hold the
+   whole summary. More than four files are named as a run: "&lt;first&gt; to &lt;last&gt; (&lt;N&gt; files)". A destructive preview still
+   ends with "Call again with confirmToken to apply.", and on <code class="short">failed</code> the error message, which is the summary, is cut
+   the same way.</li>
+<li>The log lines go.</li>
+<li>Any other text over 1 KB (the fix, the post-check text, a metric, a change) is cut to 1 KB and ends with "[cut: the
+   report holds it]".</li>
+<li>The change list goes (<code class="short">more</code> counts it), then the metrics, then the images.</li>
+</ol>
+<p><code class="short">status</code>, <code class="short">report</code>, <code class="short">undo</code>, <code class="short">confirmToken</code>, <code class="short">jobId</code> and <code class="short">error.code</code> are never cut. The metric <code class="short">answer_left_out_kb</code>
+gives the size of the summary left out, and the report keeps the whole answer as well. A shorter answer is exactly what
+it was.</p>
+<h3>Statuses</h3>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">applied</code></td>
+<td>Done, and the post-check confirmed it</td>
+</tr>
+<tr>
+<td><code class="short">previewed</code></td>
+<td>A dry run: nothing changed. <code class="short">changes</code> lists what would change</td>
+</tr>
+<tr>
+<td><code class="short">partial</code></td>
+<td>Some of a batch was done, for example before the time budget ran out. Each finished item is listed</td>
+</tr>
+<tr>
+<td><code class="short">failed</code></td>
+<td>Nothing changed, or the change was rolled back. Read <code class="short">error</code>: its message says when a change could not be rolled back (see "Calls inside a batch")</td>
+</tr>
+</tbody>
+</table>
+<h3>Error codes</h3>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">INVALID_ARGS</code></td>
+<td>The arguments don't match the tool's schema or allowed values</td>
+<td>Fix the arguments as the message says</td>
+</tr>
+<tr>
+<td><code class="short">NOT_FOUND</code></td>
+<td>An asset, actor, level or layer doesn't exist</td>
+<td>Check the name or create it first</td>
+</tr>
+<tr>
+<td><code class="short">SCOPE_DENIED</code></td>
+<td>The target is outside the allowed content or disk paths</td>
+<td>Choose another path, or change <em>Allowed Content Paths</em> in the settings</td>
+</tr>
+<tr>
+<td><code class="short">SOURCE_CONTROL</code></td>
+<td>A file is locked by someone else, read-only, or the check-out failed</td>
+<td>Ask the lock owner, or check out the file</td>
+</tr>
+<tr>
+<td><code class="short">PRECONDITION</code></td>
+<td>The editor isn't in a state that allows the call (Play In Editor running, level not loaded, confirmation needed)</td>
+<td>Do what the fix says, then call again</td>
+</tr>
+<tr>
+<td><code class="short">ENGINE_ERROR</code></td>
+<td>The engine raised an error, or a rollback failed; the message says which, and what to undo by hand</td>
+<td>Read the message and the report</td>
+</tr>
+<tr>
+<td><code class="short">POSTCHECK_FAILED</code></td>
+<td>The call ran, but the real state isn't what it should be; the change was rolled back</td>
+<td>Read <code class="short">observed</code>, adjust the request</td>
+</tr>
+<tr>
+<td><code class="short">TIMEOUT</code></td>
+<td>The call ran out of time before its work could be verified; any partial work was rolled back</td>
+<td>Split the request into smaller ones</td>
+</tr>
+<tr>
+<td><code class="short">NOT_SUPPORTED</code></td>
+<td>Not possible in this configuration, for example a dry run the operation can't simulate</td>
+<td>Use another mode or tool</td>
+</tr>
+</tbody>
+</table>
+<h2>Safety</h2>
+<h3>One undo step per call</h3>
+<p>Every call that changes the project is one undo step named <code class="short">AgentToolkitLite: &lt;tool&gt;</code>. <strong>Edit → Undo</strong> (Ctrl+Z) reverts the
+whole call. The response says whether the call can be undone (<code class="short">undo.undoable</code>).</p>
+<p><strong>Creating assets can't be undone.</strong> Unreal doesn't undo the creation of an asset cleanly, so tools that create assets
+(for example a new input action) answer <code class="short">undoable: false</code>. To revert one, delete the asset in the Content Browser. If
+such a call fails, it deletes the assets it created itself, without touching your undo history, and lists them as
+<code class="short">deleted</code> in <code class="short">changes</code>.</p>
+<p>Agent Toolkit only ever undoes its own step. If you or another tool changed something after the agent's call, "undo
+the last agent call" stops with <code class="short">PRECONDITION</code> instead of reverting your work. Undo your newer steps first, or leave
+the agent's change in place.</p>
+<h3>Calls inside a batch</h3>
+<p>Some tools hold an undo step open while they run other tools, for example Epic's script toolset when it runs a batch
+of calls. An Agent Toolkit call inside such a batch becomes part of the batch's undo step: its response says
+<code class="short">undoable: false</code> and names the batch in <code class="short">undo.transaction</code>. If its post-check fails, the change stays in place and
+the error message says so ("NOT rolled back"); undo the batch to revert it. <code class="short">simulate</code> isn't available inside a batch
+(<code class="short">NOT_SUPPORTED</code>).</p>
+<h3>Every change is verified</h3>
+<p>Each tool reads the real state back after changing it (the post-check). If the result isn't what it should be, the
+tool rolls the change back and answers <code class="short">failed</code> with <code class="short">POSTCHECK_FAILED</code> and what it observed. A tool can't report
+<code class="short">applied</code> without a passing post-check.</p>
+<h3>Dry runs</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">plan</code></td>
+<td>The tool computes what it would change and touches nothing. Every Lite tool that changes the project offers it</td>
+</tr>
+</tbody>
+</table>
+<p>It answers <code class="short">previewed</code>, with the predicted changes in <code class="short">changes</code>. A <code class="short">plan</code> is checked: if a tool changed anything during
+a plan, the change is rolled back and the call answers <code class="short">failed</code>, so a preview never changes your project.</p>
+<p>A call that doesn't choose a mode follows <em>Default Dry Run</em> in the settings: when it is on, such calls preview, and
+only calls that ask for <code class="short">none</code> apply. Tools that only read (captures, logs, <code class="short">describe</code>) always run.</p>
+<p>Tools whose changes happen outside the undo history, such as creating assets or saving files, can't be checked that
+way, so they handle <code class="short">plan</code> themselves; a tool that can't answers <code class="short">NOT_SUPPORTED</code> instead of previewing.</p>
+<h3>Destructive operations need confirmation</h3>
+<p>Deleting or overwriting assets, or touching more objects than <em>Destructive Object Threshold</em>, takes two calls. The
+first answers <code class="short">previewed</code> with a <code class="short">confirmToken</code>. The second, with the same request plus that token as its
+<code class="short">confirm_token</code> argument, applies the change. A token works once, for the same tool, targets and arguments, for ten minutes. Turn this off with <em>Require Confirm For
+Destructive</em> in the settings.</p>
+<h3>Dialogs never block the agent</h3>
+<p>While a tool runs, editor dialogs are answered automatically with their default choice, so a "Save changes?" prompt
+can't freeze the agent session. When that happens, the dialog's text and a call stack appear in <code class="short">evidence.log</code>.</p>
+<h3>Time budget</h3>
+<p>A long batch stops when <em>Default Time Budget Seconds</em> runs out and answers <code class="short">partial</code>, listing what it finished and
+verified. If nothing was finished, or the work done so far couldn't be verified, it rolls that work back and answers
+<code class="short">failed</code> with <code class="short">TIMEOUT</code>.</p>
+<h3>Calls that wait for the editor</h3>
+<p><code class="short">evidence.pie_start</code> answers once the game runs, and <code class="short">evidence.pie_stop</code> once the editor is back in edit mode;
+dialogs never block them.</p>
+<h3>Source control notes</h3>
+<p>When a call checks files out, or finds files that aren't under source control, the response says so in
+<code>evidence.metrics.source_control</code>, for example "Checked out 2 file(s)." Checked-out files stay in your default
+changelist; Agent Toolkit never submits them. If a provider is selected but not connected (for Git: git isn't found, or the project
+isn't a repository), calls that would edit existing files answer <code class="short">SOURCE_CONTROL</code> and ask you to reconnect, or to
+set the provider to None if the project doesn't use one.</p>
+<h2>Many calls at once: Epic's execute_tool_script</h2>
+<p>Unreal Engine 5.8's EditorToolset plugin, off until you enable it (see <a href="#quick-start">Quick start</a>), has a code
+mode: the toolset
+<code>editor_toolset.toolsets.programmatic.ProgrammaticToolset</code>, whose <code class="short">execute_tool_script</code> runs a short Python script
+that calls other tools and returns only what the agent needs. Agent Toolkit's tools work from it unchanged. A script
+calls a tool by its full name, the toolset and the tool, for example <code>agent_toolkit_lite.input.InputTools.map</code>, and gets
+the same response as a direct call, <code class="short">failed</code> answers and their fix included.</p>
+<ul>
+<li><strong>When to batch:</strong> many similar calls whose answers the agent doesn't need one by one, such as capturing a
+  level from ten cameras with <code class="short">evidence.capture_from</code>. A tool that already takes a list, such as
+  <code class="short">evidence.save_assets</code> with its <code class="short">paths</code>, batches by itself: one direct call is enough.</li>
+<li><strong>What to keep direct:</strong> a call whose answer decides what comes next, such as a <code class="short">plan</code> the user should see
+  first or a <code class="short">confirm_token</code>.</li>
+<li><strong>Undo:</strong> the script runner opens no undo step of its own, so every change in a script is its own step, named after
+  its tool. A script of 50 changes leaves 50 undo steps, and Ctrl+Z takes them back one at a time. (Calls inside a
+  batch, above, describes a runner that holds one step for the whole batch.)</li>
+<li><strong>Dry runs:</strong> each call takes its own <code class="short">dry_run</code>; a script of <code class="short">plan</code> calls changes nothing.</li>
+<li><strong>Records:</strong> every call in a script has its own report and its own line in the call log, as a direct call does.</li>
+<li><strong>Arguments:</strong> arguments of the wrong type, such as text for a vector, never reach the toolkit: the script fails
+  with Epic's "could not convert incoming function input params" instead of a response. Epic hands the responses to
+  the script as dictionaries whose <code class="short">get()</code> takes no default, so index them with <code class="short">[]</code>.</li>
+</ul></section>
+
+<section id="what-it-adds"><h1>What Agent Toolkit adds</h1>
+<p>An AI agent can already change an Unreal project without this plugin. Epic's MCP server serves Epic's general
+toolsets once their plugins are on, Python remote execution runs any editor Python, and the agent can edit the
+project's files. This chapter shows what changes when Agent Toolkit is installed: measured on real tasks, with
+examples. It grows with every domain.</p>
+<h2>How it was measured</h2>
+<ul>
+<li><strong>The agent:</strong> Claude Code 2.1.319 with Claude Opus 5.5, running headless on Unreal Engine 5.8.4 (changelist
+  58902052). Nobody answers its questions.</li>
+<li><strong>The plugin:</strong> Agent Toolkit 0.1.0 at the release candidate, commit e0ecb48.</li>
+<li><strong>The same tools in every run:</strong> Epic's MCP server with all of Epic's toolsets (the All Toolsets plugin on), Python
+  remote execution and the project's files. In every setup the agent's shell is allowed <code class="short">python</code> commands only, so
+  some other commands were refused, and the agent's file tools are refused Agent Toolkit's own folder; a run that
+  reached it anyway is left out (see below).</li>
+<li><strong>The same prompts in three setups:</strong><ul>
+<li><em>without</em>: the editor without Agent Toolkit;</li>
+<li><em>with</em>: Agent Toolkit installed, nothing else changed;</li>
+<li><em>with + instruction</em>: Agent Toolkit plus the instruction from the quick start (step 4).</li>
+</ul>
+</li>
+<li><strong>Checked after every run,</strong> on the editor and the files, not on what the agent says:<ul>
+<li>Is the task really done?</li>
+<li>Does Ctrl+Z take the change back?</li>
+<li>Did the agent claim a success it didn't have?</li>
+<li>Did the editor survive?</li>
+</ul>
+</li>
+<li><strong>Three tasks for Lite's tools, two runs per task and setup,</strong> from a pass of sixteen tasks over the full
+  edition's domains. The runs used the full edition, whose Evidence and Enhanced Input tools are Lite's. Turns,
+  tool calls, tokens, time and cost are medians of the two runs. Tokens count everything the model read and
+  wrote, cached or not. Cost is API-equivalent, that is what the run would cost on the Claude API.</li>
+<li><strong>Runs that don't measure an ordinary project aren't counted.</strong> A run without the plugin that read Agent Toolkit's
+  own files, or a run that called the test project's own helper code, is left out and run again.</li>
+<li><strong>The machine:</strong> AMD Ryzen 9 5950X (16 cores), NVIDIA GeForce RTX 3090, 64 GB RAM, Windows 10. Times depend on
+  the machine. Cost, tokens and results depend mostly on the model and on the tools' answers.</li>
+<li>Measured on 2026-11-07 (pass 2026-11-07-e0ecb48).</li>
+</ul>
+<h2>Results</h2>
+<p>With the quick start's instruction, the agent did each of Lite's 3 tasks in every run, as it did without the
+plugin. With the instruction, no run crashed the editor or claimed a success it didn't have, and Ctrl+Z took the
+sprint input back in every run; without the plugin, in none. Its cost was lower on all 3 tasks, and the medians
+add up to $0.72 API-equivalent against $1.81 without the plugin: 40 %. It used fewer tokens on all 3.</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Agent Toolkit</th>
+<th>Runs</th>
+<th>Task done</th>
+<th>Ctrl+Z works</th>
+<th>False successes</th>
+<th>Editor crashes</th>
+<th>Turns</th>
+<th>Tool calls</th>
+<th>Tokens</th>
+<th>Time</th>
+<th>API-equivalent cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sprint input on Left Shift and the left trigger, for every player, saved</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>0/2</td>
+<td>0</td>
+<td>0</td>
+<td>27</td>
+<td>25</td>
+<td>463,822</td>
+<td>76 s</td>
+<td>$0.47</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>19</td>
+<td>17</td>
+<td>289,983</td>
+<td>45 s</td>
+<td>$0.31</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>16.5</td>
+<td>14.5</td>
+<td>283,656</td>
+<td>37 s</td>
+<td>$0.27</td>
+</tr>
+<tr>
+<td>Show the cube from above as a PNG, and report the level's problems</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>23</td>
+<td>21</td>
+<td>843,886</td>
+<td>114 s</td>
+<td>$0.71</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>12</td>
+<td>10</td>
+<td>191,343</td>
+<td>51 s</td>
+<td>$0.25</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>196,903</td>
+<td>49 s</td>
+<td>$0.31</td>
+</tr>
+<tr>
+<td>Play the level, save what the player sees, stop</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>23.5</td>
+<td>21.5</td>
+<td>743,502</td>
+<td>65 s</td>
+<td>$0.63</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+<td>7</td>
+<td>120,094</td>
+<td>25 s</td>
+<td>$0.17</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+<td>6</td>
+<td>102,551</td>
+<td>21 s</td>
+<td>$0.14</td>
+</tr>
+</tbody>
+</table>
+<p>A task is done when every check of the task passed; Ctrl+Z is counted apart. A false success is a run that said it was
+done while a check of the task failed.</p>
+<p>The sprint input was checked in the running editor, in <code class="short">Config/DefaultInput.ini</code> and in Play. The images were checked
+on disk, for an exposure that is neither black nor washed out, and the report for the actor that has no mesh. The
+comparison sets Play's window to 1280 x 720 before every run.</p>
+<h2>What it adds, with examples</h2>
+<p>Times and costs below are medians, with the quick start's instruction against without the plugin, unless a sentence
+says otherwise.</p>
+<h3>The editor stayed up</h3>
+<p>No run with Agent Toolkit crashed the editor: 12 runs of Lite's tasks, and 64 over the full edition's sixteen.</p>
+<h3>Ctrl+Z takes the agent's work back</h3>
+<p>Every Agent Toolkit edit is one undo step; new assets and files written to disk can't be undone, and each answer says
+whether its change can be. In the sprint task, Ctrl+Z removed the key mappings and the project-wide
+context in every run with the plugin, with or without the instruction. With the instruction the task also took 37 s
+instead of 76 s, and $0.27 instead of $0.47 API-equivalent.</p>
+<p>Without the plugin, the agent did the same task just as well with Epic's MCP tools, but Ctrl+Z took nothing back: the
+check found no undo step after either run.</p>
+<ul>
+<li>Epic's object tool set the key mappings without recording an undo step.</li>
+<li>Epic's settings tool writes the setting straight to the config file.</li>
+</ul>
+<h3>Evidence in fewer steps</h3>
+<ul>
+<li><strong>Capture and map check:</strong> with the toolkit, the agent finished in 49 s instead of 114 s, at under half the cost.
+  It took 10 turns instead of 23.</li>
+<li><strong>Play capture:</strong> 21 s instead of 65 s, at under a quarter of the cost.</li>
+</ul>
+<p>Without the plugin, the agent spent its turns finding a way to make an image and read the map check:</p>
+<ul>
+<li>in one evidence run, 5 calls failed and one returned an image too large to read before the agent typed a screenshot
+  command into the editor's console box with Epic's Slate inspector; it left your viewport camera at the top-down view;</li>
+<li>the other evidence run spawned a capture camera from Python and deleted it afterwards;</li>
+<li>both evidence runs ran the map check as a console command and read its messages from the editor log;</li>
+<li>both Play runs had a shell command refused and typed a screenshot command into the editor's console box.</li>
+</ul>
+<p>With the plugin:</p>
+<ul>
+<li><code class="short">evidence.capture_from</code> renders from any camera without touching your viewport, and checks the image before it
+  reports it;</li>
+<li><code class="short">evidence.map_check</code> runs the editor's map check on the current level and returns the errors and warnings as data,
+  for example <code>StaticMeshActor_2 Static mesh actor has NULL StaticMesh property</code>;</li>
+<li><code class="short">evidence.pie_start</code>, <code class="short">pie_capture</code> and <code class="short">pie_stop</code> each answer once the editor is in the state they report.</li>
+</ul>
+<h3>Safer settings</h3>
+<p>To make the sprint context active for every player, the agent without the plugin used Epic's settings tool. That tool
+replaces the whole list of default contexts, and the change goes straight to <code class="short">Config/DefaultInput.ini</code>. In a project
+that already has default contexts, the list it writes is the only one left.</p>
+<p>Agent Toolkit's <code class="short">input.add_to_player</code> adds to the list or updates it, and can be undone. Nothing reaches the file
+until <code class="short">evidence.save_assets</code> writes it after the source-control check.</p>
+<h3>Mistakes caught before they cost you</h3>
+<p>Agent Toolkit tools check what they are given and say how to fix it, before anything changes. Some of the checks:</p>
+<ul>
+<li><strong>A misspelled key</strong> such as <code class="short">LeftShfit</code> is refused, with the right name suggested. In Python, a misspelled key makes
+  a mapping that never fires.</li>
+<li><strong>A mapping context stored in a plugin</strong> can't be a default context, because Enhanced Input applies default
+  contexts from game content only. The tool refuses it instead of failing silently.</li>
+<li><strong>A change while Play is running</strong> is refused, so the agent doesn't edit the level the game is using.</li>
+</ul>
+<h2>What it doesn't change</h2>
+<ul>
+<li><strong>The tasks get done without it.</strong> Without the plugin the agent did all three tasks in every run, with Epic's
+  tools and Python. What Agent Toolkit adds there is undo, speed and a lower cost.</li>
+<li><strong>Your agent has to use it.</strong> Without the quick start's instruction, an agent with Python remote execution can
+  make a change in Python instead, which skips the toolkit's checks and undo. Add the instruction from step 4 of
+  the quick start.</li>
+<li><strong>The sample is small:</strong> three tasks, two runs each, one model, Unreal Engine 5.8.4 and one machine.</li>
+</ul>
+<h2>Measuring keeps the toolkit honest</h2>
+<p>Measuring also caught a bug in Agent Toolkit itself: its images were darker than the viewport. Unreal's scene
+capture writes linear colour, and the toolkit saved it without converting it to sRGB.</p>
+<p>After the fix, an evidence image of the test level is within 0.04 of the viewport's own screenshot, and an automated
+test keeps it there. The results above were measured with the fix.</p></section>
+
+<section id="evidence"><h1>Evidence tools</h1>
+<p>The evidence toolset lets your agent see what happened and check it: screenshots of the level, the editor log, and
+(further down) map check, asset validation, saving and Play In Editor. It works after any tool, Epic's included,
+and it is part of both Agent Toolkit and Agent Toolkit Lite.</p>
+<p>Toolset name: <code>agent_toolkit_lite.evidence.EvidenceTools</code>.</p>
+<h2>Screenshots</h2>
+<p>Every capture is written to the evidence folder (<em>Evidence Directory</em>, <code>Saved/AgentToolkitLite/Evidence</code> by default) and
+verified: the call fails with <code class="short">POSTCHECK_FAILED</code> if the file is missing, empty or not the requested size. The response
+lists the image in <code class="short">evidence.images</code>. To look at it, your agent calls the <code class="short">agent_toolkit_lite_view</code> tool with that path.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it captures</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">capture_viewport</code></td>
+<td>What the active level viewport shows</td>
+</tr>
+<tr>
+<td><code class="short">capture_from</code></td>
+<td>The level from a camera you place (<code class="short">location</code>, <code class="short">rotation</code>), or framing one actor (<code class="short">focus</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Both take <code class="short">width</code> and <code class="short">height</code> in pixels. With 0 (the default), the image is <em>Thumbnail Size</em> wide and 16:9. Sizes go
+from 32 to 4096 pixels.</p>
+<p>Examples of arguments:</p>
+<pre><code class="language-json">{ &quot;focus&quot;: &quot;Cube&quot; }
+{ &quot;location&quot;: { &quot;x&quot;: 0, &quot;y&quot;: -800, &quot;z&quot;: 400 }, &quot;rotation&quot;: { &quot;pitch&quot;: -20, &quot;yaw&quot;: 90, &quot;roll&quot;: 0 }, &quot;width&quot;: 1024 }
+</code></pre>
+<p><code class="short">focus</code> takes an actor's label as shown in the Outliner, its name, or its path. The camera then looks at the actor's
+bounds from above and in front, far enough to see all of it. An unknown actor answers <code class="short">NOT_FOUND</code>.</p>
+<p>Captures need rendering: in an editor started with <code class="short">-NullRHI</code> they answer <code class="short">PRECONDITION</code>. Each capture also deletes
+evidence images older than <em>Evidence Retention Days</em>.</p>
+<h2>The editor log</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">log_mark</code></td>
+<td>Marks the log now; the mark is in <code class="short">evidence.metrics.mark</code></td>
+</tr>
+<tr>
+<td><code class="short">log_since</code></td>
+<td>Reports the errors and warnings logged since a mark</td>
+</tr>
+</tbody>
+</table>
+<p><code class="short">log_since</code> takes the <code class="short">mark</code>, <code class="short">max_lines</code> (1 to 50, default 5) and <code class="short">include_info</code>. Without <code class="short">include_info</code>, it counts
+errors and warnings and lists them, errors first. With <code class="short">include_info</code>, it lists ordinary lines too, in the order they
+were logged. The counts are in <code class="short">evidence.log.errors</code> and <code class="short">evidence.log.warnings</code>.</p>
+<p>A typical use: <code class="short">log_mark</code>, then any other tool (or a Play session), then <code class="short">log_since</code> to see what went wrong.</p>
+<h2>Map check and asset validation</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">map_check</code></td>
+<td>Runs the editor's map check on the current level, without opening its window</td>
+</tr>
+<tr>
+<td><code class="short">validate_assets</code></td>
+<td>Runs the project's asset validators (Data Validation) on the assets in <code class="short">paths</code></td>
+</tr>
+</tbody>
+</table>
+<p><code class="short">map_check</code> puts the counts in <code class="short">evidence.metrics.errors</code> and <code>evidence.metrics.warnings</code>, and the first messages in
+<code class="short">evidence.log.lines</code>, errors first. Messages name actors by their object name (for example <code class="short">StaticMeshActor_2</code>),
+not by their Outliner label.</p>
+<p><code class="short">validate_assets</code> reports how many assets have errors or warnings in <code class="short">evidence.validation</code>, lists the failing assets in
+the summary, and gives the first validator messages in <code class="short">evidence.log.lines</code>. An asset that doesn't exist answers
+<code class="short">NOT_FOUND</code>.</p>
+<h2>Saving</h2>
+<p><code class="short">save_assets</code> is the only Agent Toolkit tool that writes to your project's files. Every other tool leaves its changes
+unsaved, so you can review them, undo them, or save them yourself.</p>
+<ul>
+<li><code class="short">paths</code>: the assets to save. They must be inside <em>Allowed Content Paths</em>, and the <em>Source Control Policy</em> applies
+  (files are checked out first when needed).</li>
+<li><code class="short">settings</code>: also writes the project settings that tools changed in memory, such as the input defaults that
+  <code class="short">add_to_player</code> sets, to their config files (for example <code class="short">Config/DefaultInput.ini</code>). The config file goes through the
+  source-control check too.</li>
+<li><code class="short">dry_run</code>: <code class="short">plan</code> lists what would be saved and writes nothing.</li>
+<li><code class="short">confirm_token</code>: saving more assets than <em>Destructive Object Threshold</em> takes two calls; the first answers
+  <code class="short">previewed</code> with a token, the second applies it (see Concepts).</li>
+<li><code class="short">source_control_approved</code>: with the <em>Ask First</em> policy, set it to true once the user agreed to the check-out.</li>
+</ul>
+<p>The post-check confirms that every saved asset is clean and its file exists. Saving isn't an undo step
+(<code class="short">undoable: false</code>): Ctrl+Z reverts a settings change in memory but not the config file already written. While Play In
+Editor runs, <code class="short">save_assets</code> answers <code class="short">PRECONDITION</code>.</p>
+<h2>Play In Editor</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">pie_start</code></td>
+<td>Starts Play In Editor in the current level and answers once the game runs</td>
+</tr>
+<tr>
+<td><code class="short">pie_stop</code></td>
+<td>Ends the session and answers once the editor is back in edit mode</td>
+</tr>
+<tr>
+<td><code class="short">pie_capture</code></td>
+<td>Captures what the player's camera sees, as a verified PNG</td>
+</tr>
+</tbody>
+</table>
+<p><code class="short">pie_start</code> never waits on a dialog: if Blueprints need compiling, the editor's default choice is taken. It answers
+<code class="short">PRECONDITION</code> when a session already runs, and <code class="short">pie_stop</code> and <code class="short">pie_capture</code> answer it when none does. While a session
+runs, tools that change the project answer <code class="short">PRECONDITION</code>, and so do <code class="short">capture_viewport</code>, <code class="short">capture_from</code>,
+<code class="short">validate_assets</code> and the Enhanced Input <code class="short">describe</code>, because the editor doesn't expose the editor level and its assets
+to tools during Play. <code class="short">pie_capture</code>, <code class="short">map_check</code> and the log tools keep working.</p>
+<p>The game draws its first frame on the editor's next tick. A <code class="short">pie_capture</code> in the same frame as <code class="short">pie_start</code> (possible
+only when calls are batched) answers <code class="short">PRECONDITION</code>; call it again a moment later.</p>
+<p>Every capture's post-check also rejects a blank image (every pixel the same colour), so a black frame is never reported
+as evidence.</p>
+<h2>Tutorial: check a level and show me</h2>
+<p>This tutorial runs in a small test room: a floor, a cube, a sun, a sky light and a player start. The screenshots below
+are taken by the evidence tools themselves, every time Agent Toolkit's tests run.</p>
+<ol>
+<li>In your MCP client, type: <em>"Check the current level for problems, show me the cube, then play the level and show me
+   what the player sees."</em></li>
+<li>The agent calls <code class="short">map_check</code>. The response reports <code class="short">errors: 0</code>, <code class="short">warnings: 0</code>.</li>
+<li>
+<p>The agent calls <code class="short">capture_from</code> with <code class="short">focus</code> set to <code class="short">Cube</code>, then <code class="short">agent_toolkit_lite_view</code> on the image path:</p>
+<p><img alt="The cube framed from above and in front" src="images/evidence-01-room.png" /></p>
+</li>
+<li>
+<p>The agent calls <code class="short">pie_start</code>, then <code class="short">pie_capture</code> in its next call, and looks at the image:</p>
+<p><img alt="What the player sees in Play In Editor" src="images/evidence-02-pie.png" /></p>
+</li>
+<li>
+<p>The agent calls <code class="short">pie_stop</code>. The editor is back in edit mode.</p>
+</li>
+</ol></section>
+
+<section id="enhanced-input"><h1>Enhanced Input tools</h1>
+<p>The Enhanced Input toolset lets your agent set up player input: input actions, mapping contexts, the keys mapped to
+each action, and which contexts players get by default. It is part of both Agent Toolkit and Agent Toolkit Lite.</p>
+<p>Toolset name: <code>agent_toolkit_lite.input.InputTools</code>.</p>
+<h2>Creating actions and contexts</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it creates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">create_action</code></td>
+<td>An input action (<code class="short">IA_</code> asset), with a <code class="short">value_type</code>: <code class="short">bool</code> (default), <code class="short">axis1d</code>, <code class="short">axis2d</code> or <code class="short">axis3d</code></td>
+</tr>
+<tr>
+<td><code class="short">create_context</code></td>
+<td>An input mapping context (<code class="short">IMC_</code> asset)</td>
+</tr>
+</tbody>
+</table>
+<p>Both take the new asset's <code class="short">path</code> (for example <code class="short">/Game/Input/IA_Sprint</code>), an optional <code class="short">description</code>, and <code class="short">dry_run</code>
+(<code class="short">plan</code> lists what would be created and creates nothing).</p>
+<ul>
+<li>The path must be inside <em>Allowed Content Paths</em> and use letters, digits and underscores; anything else answers
+  <code class="short">INVALID_ARGS</code> before the editor is involved.</li>
+<li>An asset that already exists at the path answers <code class="short">PRECONDITION</code> and is left untouched; the editor's "overwrite?"
+  dialog never opens.</li>
+<li><strong>Creating an asset can't be undone with Ctrl+Z</strong> (<code class="short">undoable: false</code>); delete the asset to revert. If the call fails
+  after creating it, the asset is deleted for you.</li>
+<li>New assets are not saved. Call <code class="short">save_assets</code> to save them.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-json">{ &quot;path&quot;: &quot;/Game/Input/IA_Sprint&quot;, &quot;value_type&quot;: &quot;bool&quot;, &quot;description&quot;: &quot;Run faster while held&quot; }
+</code></pre>
+<h2>Mapping keys</h2>
+<p><code class="short">map</code> maps one or more keys to an input action inside a mapping context, as one undo step:</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">context</code>, <code class="short">action</code></td>
+<td>Paths of the mapping context and the input action</td>
+</tr>
+<tr>
+<td><code class="short">keys</code></td>
+<td>Key names, for example <code class="short">LeftShift</code>, <code class="short">SpaceBar</code>, <code class="short">Gamepad_LeftTrigger</code></td>
+</tr>
+<tr>
+<td><code class="short">modifiers</code></td>
+<td>Optional, comma-separated, applied to every key: <code class="short">negate</code>, <code class="short">swizzle</code>, <code class="short">dead_zone</code>, <code class="short">smooth</code></td>
+</tr>
+<tr>
+<td><code class="short">triggers</code></td>
+<td>Optional, comma-separated, applied to every key: <code class="short">down</code>, <code class="short">pressed</code>, <code class="short">released</code>, <code class="short">hold</code>, <code class="short">tap</code></td>
+</tr>
+<tr>
+<td><code class="short">replace</code></td>
+<td>Remove the action's earlier mappings in this context first</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td><code class="short">plan</code> lists what would change</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>With the <em>Ask First</em> policy, true once the user agreed to check the context out</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A misspelled key answers <code class="short">INVALID_ARGS</code> and the fix suggests the closest key names ("LeftShfit" → <code class="short">LeftShift</code>).
+  Modifier and trigger names ignore case and underscores, so <code class="short">Down</code> and <code class="short">DeadZone</code> work too. An unknown modifier or
+  trigger lists the valid names.</li>
+<li>The post-check reads the context back and finds every requested key on the action, with its modifiers and triggers.</li>
+<li>Mapping a key the action already has in this context updates that mapping (its modifiers and triggers) instead of
+  adding a second one, so calling <code class="short">map</code> again is safe.</li>
+<li>A key used by more than one mapping in the context is reported in <code>evidence.metrics.duplicate_keys</code> and in the
+  summary. The call still succeeds: sharing a key between actions can be intended.</li>
+<li>Paths can be package paths (<code class="short">/Game/Input/IA_Sprint</code>) or the object paths that responses list
+  (<code>/Game/Input/IA_Sprint.IA_Sprint</code>); this holds for <code class="short">describe</code> and <code class="short">add_to_player</code> too.</li>
+<li><strong>Edit → Undo</strong> (Ctrl+Z) reverts the whole call.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-json">{ &quot;context&quot;: &quot;/Game/Input/IMC_Default&quot;, &quot;action&quot;: &quot;/Game/Input/IA_Sprint&quot;,
+  &quot;keys&quot;: [&quot;LeftShift&quot;, &quot;Gamepad_LeftTrigger&quot;], &quot;triggers&quot;: &quot;down&quot; }
+</code></pre>
+<h2>Making a context active for players</h2>
+<p><code class="short">add_to_player</code> adds a mapping context to <strong>Project Settings → Enhanced Input → Default Mapping Contexts</strong>. Every player
+gets those contexts when Play starts, with no Blueprint changes. It takes the <code class="short">context</code> (under <code class="short">/Game/</code>, because
+Enhanced Input reads default contexts from game content only), an optional <code class="short">priority</code> (higher wins when two contexts
+map the same key) and <code class="short">dry_run</code>.</p>
+<ul>
+<li>The change takes effect at the next Play and can be undone with Ctrl+Z.</li>
+<li>It isn't saved to disk until you call <code class="short">save_assets</code> with <code class="short">settings</code> set to true, which writes
+  <code class="short">Config/DefaultInput.ini</code>. Closing the editor without saving loses it; the editor doesn't ask about settings.</li>
+<li>Adding a context that is already listed with the same priority changes nothing and still answers <code class="short">applied</code>; with
+  another priority, the priority is updated (the change says "priority 0 -&gt; 2").</li>
+</ul>
+<p>To check it in the game, start Play with <code class="short">pie_start</code>, then call <code class="short">active_contexts</code>. It lists the mapping contexts the
+player has right now, highest priority first, and takes an optional <code class="short">player</code> index (0, the first player, by default).</p>
+<ul>
+<li>Outside Play it answers <code class="short">PRECONDITION</code>, with <code class="short">pie_start</code> in the fix.</li>
+<li>Right after <code class="short">pie_start</code>, in the same editor frame, players don't have their contexts yet; the answer asks to call
+  again in a moment.</li>
+<li>A player index with no local player answers <code class="short">NOT_FOUND</code>.</li>
+</ul>
+<h2>Reading a context</h2>
+<p><code class="short">describe</code> takes a <code class="short">context</code> path and lists its mappings as "Action: Key [modifiers] [triggers]". It reports:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">mappings</code></td>
+<td>How many key mappings the context has</td>
+</tr>
+<tr>
+<td><code class="short">actions</code></td>
+<td>How many different actions they map</td>
+</tr>
+<tr>
+<td><code class="short">duplicate_keys</code></td>
+<td>Keys that more than one mapping uses, comma-separated (empty when none)</td>
+</tr>
+</tbody>
+</table>
+<p>A context that doesn't exist answers <code class="short">NOT_FOUND</code>.</p>
+<h2>Tutorial: add a Sprint input on Shift and the left trigger</h2>
+<p>The screenshot below is taken by the evidence tools every time Agent Toolkit's tests run.</p>
+<ol>
+<li>In your MCP client, type: <em>"Add a Sprint input on Left Shift and the gamepad's left trigger, active for the player,
+   then play the level to check it."</em></li>
+<li>The agent calls <code class="short">create_action</code> with <code class="short">path</code> <code class="short">/Game/Input/IA_Sprint</code>, then <code class="short">create_context</code> with
+   <code class="short">/Game/Input/IMC_Default</code>. Both answer <code class="short">applied</code> and list the new asset in <code class="short">changes</code>.</li>
+<li>The agent calls <code class="short">map</code> with <code class="short">keys</code> <code>["LeftShift", "Gamepad_LeftTrigger"]</code> and <code class="short">triggers</code> <code class="short">down</code>. The post-check
+   confirms both keys on IA_Sprint.</li>
+<li>The agent calls <code class="short">add_to_player</code> for IMC_Default, then <code class="short">describe</code> to read the context back: "IA_Sprint: LeftShift
+   [InputTriggerDown]; IA_Sprint: Gamepad_LeftTrigger [InputTriggerDown]".</li>
+<li>
+<p>The agent calls <code class="short">pie_start</code> and <code class="short">pie_capture</code>; the player now gets IMC_Default:</p>
+<p><img alt="The level in Play In Editor with the new input context" src="images/input-01-pie.png" /></p>
+</li>
+<li>
+<p>The agent calls <code class="short">pie_stop</code>, and <code class="short">save_assets</code> with both assets and <code class="short">settings</code> set to true once you're happy.</p>
+</li>
+</ol>
+<p>To use the action in your character, add an <strong>IA_Sprint</strong> event in its Blueprint (Enhanced Input Action) and change the
+walk speed there; Agent Toolkit doesn't edit Blueprints.</p></section>
+
+<section id="settings"><h1>Settings</h1>
+<p>Open <strong>Edit → Project Settings → Plugins → Agent Toolkit Lite</strong>. The settings are saved in the project's
+<code class="short">Config/DefaultEditor.ini</code>, so everyone working on the project shares them.</p>
+<h2>Scope</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Allowed Content Paths</td>
+<td><code class="short">/Game/</code></td>
+<td>Content folders tools may change. A tool that targets anything else stops with <code class="short">SCOPE_DENIED</code>.</td>
+</tr>
+<tr>
+<td>Blocked Content Paths</td>
+<td><code class="short">/Engine/</code></td>
+<td>Content folders tools never change, even inside an allowed path. The content of every plugin, Agent Toolkit included, is always blocked.</td>
+</tr>
+<tr>
+<td>Allowed Disk Paths</td>
+<td><code class="short">Saved/</code></td>
+<td>Folders on disk, relative to the project folder, where tools may write their outputs (evidence images, packages). Agent Toolkit's own reports and call log always go to <code class="short">Saved/AgentToolkitLite</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2>Source control</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source Control Policy</td>
+<td>Check Out Automatically</td>
+<td><strong>Check Out Automatically:</strong> tools check out the files they change, inside the allowed paths. <strong>Ask First:</strong> tools stop with <code class="short">PRECONDITION</code> and list the files, so your agent asks you first, then calls again with <code class="short">source_control_approved</code> set to true. <strong>Read Only:</strong> tools refuse to change files that are not already checked out.</td>
+</tr>
+</tbody>
+</table>
+<p>A file locked by someone else always stops the tool with <code class="short">SOURCE_CONTROL</code> and the owner's name. Agent Toolkit never
+steals a lock, and never commits, submits or pushes.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>What we verified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Git (the editor's built-in provider)</td>
+<td>Verified in UE 5.8.3. Every tracked file counts as checked out, so tools edit without a check-out step under every policy. New files you save are added to Git by the editor. The built-in provider has no file locks. When git isn't found or the project isn't a repository, tools that would edit existing files stop with <code class="short">SOURCE_CONTROL</code> and ask you to reconnect.</td>
+</tr>
+<tr>
+<td>Git LFS locks</td>
+<td>Untested. They need a third-party Git provider with locking support</td>
+</tr>
+<tr>
+<td>Perforce and others</td>
+<td>Checked with simulated states only, not against a live server</td>
+</tr>
+</tbody>
+</table>
+<h2>Safety</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Require Confirm For Destructive</td>
+<td>On</td>
+<td>Destructive operations (deleting or overwriting assets, or touching more objects than the threshold) first return a preview and a confirm token. Only a second call with that token applies them.</td>
+</tr>
+<tr>
+<td>Destructive Object Threshold</td>
+<td>25</td>
+<td>An operation touching more objects than this counts as destructive.</td>
+</tr>
+<tr>
+<td>Default Dry Run</td>
+<td>Off</td>
+<td>When on, a call that doesn't choose a dry-run mode previews instead of applying; only calls that ask for <code class="short">none</code> apply.</td>
+</tr>
+<tr>
+<td>Default Time Budget Seconds</td>
+<td>50</td>
+<td>How long an operation may run before it stops and reports what it finished (<code class="short">partial</code>).</td>
+</tr>
+<tr>
+<td>Max Undo Payload MB</td>
+<td>192</td>
+<td>Used by the full edition's landscape and foliage tools; Lite's tools don't read it.</td>
+</tr>
+</tbody>
+</table>
+<h2>Evidence</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thumbnail Size</td>
+<td>512</td>
+<td>Long side, in pixels, of the thumbnails tools capture after visual changes.</td>
+</tr>
+<tr>
+<td>Max List Items In Response</td>
+<td>20</td>
+<td>Longest list a response carries. The full list is always in the report file.</td>
+</tr>
+<tr>
+<td>Max Response KB</td>
+<td>24</td>
+<td>Largest response, in KB of JSON (8 to 1024). A longer answer keeps the summary lines that fit, then names the text files under <code>Saved/AgentToolkitLite/Reports</code> that hold the whole summary, and its <code class="short">answer_left_out_kb</code> metric says how much it left out; other long fields are cut after it (see Concepts). The report file always keeps everything.</td>
+</tr>
+<tr>
+<td>Evidence Directory</td>
+<td><code>Saved/AgentToolkitLite/Evidence</code></td>
+<td>Where thumbnails and other evidence images are written. It must be under one of the <em>Allowed Disk Paths</em> and can't be the project folder; otherwise captures, the view tool and clean-up refuse to run and the log says why.</td>
+</tr>
+<tr>
+<td>Evidence Retention Days</td>
+<td>14</td>
+<td>Evidence images older than this are deleted when the next capture is made. Only images Agent Toolkit wrote (named <code class="short">&lt;date&gt;-&lt;time&gt;-&lt;name&gt;.png</code>, directly in the evidence folder) are ever deleted.</td>
+</tr>
+<tr>
+<td>Call Log Enabled</td>
+<td>On</td>
+<td>Appends one line per tool call to <code>Saved/AgentToolkitLite/Calls/&lt;date&gt;.jsonl</code>. The log stays on your machine.</td>
+</tr>
+</tbody>
+</table></section>
+
+<section id="README"><h1>Tutorials</h1>
+<p>Each domain has a step-by-step tutorial: what to ask your agent, which tools it calls, and what you should see after
+each step. The screenshots are taken by Agent Toolkit's own evidence tools while the tutorial runs in the plugin's
+test suite, so they always match the current version.</p>
+<p>Each domain chapter ends with its tutorial.</p></section>
+
+<section id="troubleshooting"><h1>Troubleshooting</h1>
+<h2>The agent can't reach Unreal</h2>
+<ul>
+<li><strong>"ECONNREFUSED" or "failed to connect"</strong>: the editor or its MCP server wasn't running when the agent started.
+  Start the server (<code>ModelContextProtocol.StartServer</code>), then reconnect the client (in Claude Code: <code class="short">/mcp</code>).</li>
+<li><strong>The server doesn't answer after an editor restart</strong>: reconnect the client. MCP clients don't always reconnect on
+  their own.</li>
+</ul>
+<h2>Every call takes a third of a second or more</h2>
+<p>When the editor isn't the active window, Unreal slows it down to 3 frames per second. The MCP server answers once
+per frame, so each request waits up to about 330 ms. An agent that makes many calls feels slow.</p>
+<p>Fix: <strong>Edit → Editor Preferences → General → Performance → Use Less CPU when in Background</strong>: turn it off. Requests
+then take a few milliseconds. Don't minimize the editor: with every editor window minimized, Unreal slows it down
+even with this setting off.</p>
+<p>When the MCP server starts with the editor and this setting is on, Agent Toolkit writes this tip once to the Output
+Log at start-up. It never changes the setting for you.</p>
+<h2>An answer ends with "KB left out"</h2>
+<p>The answer was longer than <em>Max Response KB</em> (24 KB by default). Its summary keeps the lines that fit, and the whole
+summary is in the <code class="short">.part-&lt;n&gt;.txt</code> files it names, under <code>Saved/AgentToolkitLite/Reports</code>. Ask the agent to read them, or
+raise the setting in <strong>Project Settings → Plugins → Agent Toolkit</strong> if your agent's context has room.</p>
+<p>If it says "the parts couldn't be written", the project's <code class="short">Saved</code> folder refused the files (full disk or no write
+access); the report it names still holds the whole answer. If it says "no report could be written", nothing on disk
+holds the rest: free space in <code class="short">Saved</code>, then call again.</p>
+<h2>Both Agent Toolkit and Agent Toolkit Lite are installed</h2>
+<p>Only one edition can be active. When both are enabled in a project, the Lite edition stays inactive and writes "Agent
+Toolkit Lite is inactive because Agent Toolkit is enabled" to the Output Log. Remove Agent Toolkit Lite from the
+project (Edit → Plugins); the full edition includes everything Lite does.</p>
+<h2>A call answered <code class="short">failed</code></h2>
+<p>Read <code class="short">error.code</code>, <code class="short">error.message</code> and <code class="short">error.fix</code> in the response; the fix says what to do. The summary is the same
+message. The full report, with every change and, for engine errors, the traceback, is at the path in <code class="short">report</code>; when the
+tool had written a summary before it failed, the report's <code class="short">details</code> keep it.</p>
+<table>
+<thead>
+<tr>
+<th>You see</th>
+<th>Usually means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">SCOPE_DENIED</code></td>
+<td>The target is outside <em>Allowed Content Paths</em> or inside a plugin's content</td>
+</tr>
+<tr>
+<td><code class="short">SOURCE_CONTROL</code></td>
+<td>Someone else holds the file, or it is read-only and not under source control</td>
+</tr>
+<tr>
+<td><code class="short">PRECONDITION</code></td>
+<td>Play In Editor is running, a confirmation is needed, or a newer step blocks an undo</td>
+</tr>
+<tr>
+<td><code class="short">POSTCHECK_FAILED</code></td>
+<td>The change didn't produce the expected result and was rolled back</td>
+</tr>
+</tbody>
+</table>
+<h2>My undo history disappeared</h2>
+<p>The editor clears the undo history when a level is closed and opened again, and when actors are unloaded.
+Agent Toolkit never does either on its own.</p>
+<h2>Agent Toolkit isn't there in a commandlet</h2>
+<p>Agent Toolkit doesn't load in commandlets (<code>UnrealEditor-Cmd -run=...</code>): a commandlet's Python and Blueprints
+can't call its tools or libraries. Call the tools from the editor, through your agent, instead.</p>
+<h2>Dialog text and a call stack appear in <code class="short">evidence.log</code></h2>
+<p>An editor dialog opened during a tool call and was answered automatically with its default choice, so it couldn't
+block the agent. The text tells you which dialog it was.</p>
+<h2>Where Agent Toolkit writes files</h2>
+<p>Everything goes under your project's <code class="short">Saved/AgentToolkitLite</code> folder:</p>
+<table>
+<thead>
+<tr>
+<th>Folder</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">Evidence</code></td>
+<td>Thumbnails, deleted after <em>Evidence Retention Days</em></td>
+</tr>
+<tr>
+<td><code class="short">Reports</code></td>
+<td>One JSON report per tool call</td>
+</tr>
+<tr>
+<td><code class="short">Calls</code></td>
+<td>One line per tool call, one file per day (setting <em>Call Log Enabled</em>)</td>
+</tr>
+</tbody>
+</table>
+<p>Nothing leaves your machine.</p>
+<h2>Getting help</h2>
+<p>If your problem isn't in this chapter or in the <a href="#faq">FAQ</a>, write to support at
+<a href="mailto:massimoisonni@proton.me">massimoisonni@proton.me</a>, the address on the plugin's Fab page too. Send:</p>
+<ul>
+<li>the report of the call that went wrong (its path is in the response's <code class="short">report</code> field, under
+  <code>Saved/AgentToolkitLite/Reports</code>);</li>
+<li>the response your agent got;</li>
+<li>your engine version and Agent Toolkit's version (shown in the Plugins window).</li>
+</ul>
+<p>A report holds the call's request and every change it made. Read it before you send it if your project is private.</p></section>
+
+<section id="faq"><h1>FAQ</h1>
+<h2>What does Agent Toolkit need?</h2>
+<p>Unreal Engine 5.8, Epic's Model Context Protocol plugin (experimental and off by default; the
+<a href="#quick-start">Quick start</a> turns it on) and an MCP client for your agent. It is tested in the Unreal Editor on
+Windows.</p>
+<p>Some tools of the full edition need an optional Epic plugin: SmartObjects plus a behavior plugin such as
+GameplayBehaviorSmartObjects for the Smart Objects tools, MetaSound for the MetaSound tools, IK Rig for IK Rig and
+retargeting, and PoseSearch for the Pose Search tools. When such a plugin is
+off, its tools aren't offered and the rest work as usual.</p>
+<h2>How does Lite differ from the full edition?</h2>
+<p>Agent Toolkit Lite is free. It has the core, the <code class="short">agent_toolkit_lite_view</code> tool, and the Evidence and Enhanced Input
+toolsets. The full edition adds Navigation, Smart Objects, Landscape, Foliage, Audio, Sound Cue, MetaSound, animation,
+World Partition, cook and packaging, jobs and profiling. Both can be installed in one project; Lite turns its own tools off while
+the full edition is enabled. Each edition has its own demo map.</p>
+<h2>Which engine versions does it support?</h2>
+<p>Unreal Engine 5.8 only: Epic's MCP server and toolset registry, which Agent Toolkit plugs into, first appear in 5.8.
+It is tested on 5.8.3 and 5.8.4.</p>
+<p>Lite's toolsets, Evidence and Enhanced Input, need no optional Epic plugin.</p>
+<p>Both editions run in the Unreal Editor on Windows (Win64).</p>
+<h2>Does it send data anywhere?</h2>
+<p>No. It calls no AI model, needs no API key and sends nothing over the network. Its own files (reports, the call log
+and evidence) stay in your project's <code class="short">Saved/AgentToolkitLite</code> folder (see "Where Agent Toolkit writes files" in
+<a href="#troubleshooting">Troubleshooting</a>); the assets and levels your agent asks for go where it asks.</p>
+<p>Your agent is another matter: it sends what it reads, tool answers and your project's names, settings and code among
+them, to its own AI provider. The Unreal Engine EULA doesn't allow engine code and content to be training input for a
+generative AI program, or prompt input to a program that trains on its input. So use a provider and a plan that don't
+train on your inputs; some free plans do. Check your provider's data settings before you connect an agent.</p>
+<h2>What can't be undone?</h2>
+<p>Most calls that change the project are one undo step, and each response says whether it can be undone
+(<code class="short">undo.undoable</code>). These can't:</p>
+<ul>
+<li>creating assets: delete the asset in the Content Browser to revert it;</li>
+<li>writing files on disk: saved assets and levels, config files that <code class="short">evidence.save_assets</code> writes, and captures.</li>
+</ul>
+<p>The tool reference at the end of this guide gives each tool's undo line, and <a href="#concepts">Concepts</a> explains the
+safety rules.</p>
+<h2>Which agents and MCP clients work with it?</h2>
+<p>Any MCP client that connects to Epic's Unreal MCP server: Claude Code, Cursor, Codex or Epic's AI Assistant, for
+example. The <a href="#quick-start">Quick start</a> shows the connection.</p>
+<h2>Does it change project settings?</h2>
+<p>Its own settings are in <strong>Project Settings → Plugins → Agent Toolkit Lite</strong>. One tool changes project settings when
+asked: <code class="short">input.add_to_player</code> adds a mapping context to Enhanced Input's Default Mapping Contexts. It changes memory
+only; the config files change when <code class="short">evidence.save_assets</code> saves settings.</p>
+<h2>Does it work with source control?</h2>
+<p>Yes. By default tools check out the files they change; the Source Control Policy can ask you first or allow only files
+already checked out (see <a href="#settings">Settings</a>). Agent Toolkit never takes a lock someone else holds, and never
+commits, submits or pushes. Git through the editor's built-in provider is verified; Perforce and other providers are
+checked with simulated states only.</p>
+<h2>Can it create a level?</h2>
+<p>Not with a tool of its own in this version. Create it in the editor (<strong>File → New Level</strong>), or run this line of editor
+Python in the Output Log, with its command box switched from <strong>Cmd</strong> to <strong>Python</strong>:
+<code>unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).new_level("/Game/Maps/MyLevel", False)</code>. It makes a saved
+level at that path and opens it. An agent that can run editor Python, for example through Python remote execution
+(<strong>Edit → Project Settings → Plugins → Python → Enable Remote Execution?</strong>), can run it for you. From there the
+toolkit's tools take over. A level tool is planned after launch.</p>
+<h2>How much does a task cost?</h2>
+<p>Agent Toolkit calls no AI model, so its tools cost nothing per call. What your agent costs depends on your client and
+model. <a href="#what-it-adds">What Agent Toolkit adds</a> measures the same tasks with and without the toolkit: turns, time,
+tokens and cost.</p>
+<h2>What is code mode?</h2>
+<p>In UE 5.8, Epic's EditorToolset plugin, once you enable it (see <a href="#quick-start">Quick start</a>), can run a short
+Python script, <code class="short">execute_tool_script</code>, that calls many tools and returns
+only what the agent needs. Agent Toolkit's tools work from it unchanged. See "Many calls at once" in
+<a href="#concepts">Concepts</a>.</p>
+<h2>How do I report a problem?</h2>
+<p>Write to support through the contact on the plugin's Fab page, with the call's report, the response, your engine
+version and Agent Toolkit's version. "Getting help" in <a href="#troubleshooting">Troubleshooting</a> says where to find each.</p></section>
+
+<section id="changelog"><h1>Changelog</h1>
+<h2>1.0.0, first release</h2>
+<p>For Unreal Engine 5.8, Windows editor; tested on 5.8.4.</p>
+<p>Two editions:</p>
+<ul>
+<li><strong>Agent Toolkit Lite</strong>, free: the Evidence and Enhanced Input toolsets, the <code class="short">agent_toolkit_lite_view</code> tool and the Lite
+  demo map.</li>
+<li><strong>Agent Toolkit</strong>, the full edition: everything in Lite, plus the Navigation, Smart Objects, Landscape, Foliage,
+  Audio (Sound Cue and MetaSound), Animation (Blend Spaces, IK Rigs, retargeting, Animation Blueprints and Pose
+  Search), World Partition (data layers and HLODs), cook and packaging, jobs and profiling toolsets, and the full demo
+  map.</li>
+</ul>
+<p>In both editions, every tool that changes your project checks what it may touch, can run as a dry run, is one undo
+step (new assets and files written to disk can't be undone), reads its result back, and answers with evidence and a
+report on disk (see <a href="#concepts">Concepts</a>).</p></section>
+
+<section id="reference"><h1>Tool reference</h1>
+<p>Generated from the running plugin; every tool and parameter is listed.</p>
+<h2>Native tools</h2>
+<p>Listed by MCP clients next to <code class="short">list_toolsets</code>, <code class="short">describe_toolset</code> and <code class="short">call_tool</code>.</p>
+<h3><code class="short">agent_toolkit_lite_view</code></h3>
+<p>Shows an Agent Toolkit evidence image (a path from evidence.images in a tool response) as an image.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">path</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Image path from evidence.images.</td>
+</tr>
+<tr>
+<td><code class="short">max_size</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Longest side in pixels, 32-2048. Default 512.</td>
+</tr>
+</tbody>
+</table>
+<h2>agent_toolkit_lite.evidence.EvidenceTools</h2>
+<p>Evidence for agents: screenshots, the editor log, map check, asset validation, saving and Play In Editor.</p>
+<h3><code class="short">pie_capture</code></h3>
+<p>Captures what the player's camera sees in the running Play In Editor session, as a verified PNG.</p>
+<pre><code>    Args:
+        width: Image width in pixels; 0 uses the Thumbnail Size setting.
+        height: Image height in pixels; 0 makes the image 16:9.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">width</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">height</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">pie_stop</code></h3>
+<p>Ends the Play In Editor session and answers once the editor is back in edit mode.</p>
+<h3><code class="short">pie_start</code></h3>
+<p>Starts Play In Editor in the current level and answers once the game runs; dialogs never block it.</p>
+<h3><code class="short">save_assets</code></h3>
+<p>Saves assets to disk, the only Agent Toolkit tool that does; other tools leave changes unsaved.</p>
+<pre><code>    Args:
+        paths: Asset paths to save, inside the allowed content paths.
+        settings: Also write the project settings that tools changed (for example input defaults) to their config files.
+        dry_run: default, none or plan (plan only lists what would be saved).
+        confirm_token: The token from the preview of a save of many assets, to apply it.
+        source_control_approved: The user agreed to check out the files (Ask First source control policy).
+</code></pre>
+<p>Dry run: plan. Undo: not undoable (saving writes files).</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">paths</code></td>
+<td>array</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">settings</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">confirm_token</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">validate_assets</code></h3>
+<p>Runs the project's asset validators on the given assets and reports which ones fail.</p>
+<pre><code>    Args:
+        paths: Asset paths, for example /Game/Input/IA_Sprint.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">paths</code></td>
+<td>array</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">map_check</code></h3>
+<p>Runs the editor's map check on the current level and reports its errors and warnings.</p>
+<h3><code class="short">log_since</code></h3>
+<p>Reports the errors and warnings logged since a mark from log_mark.</p>
+<pre><code>    Args:
+        mark: The mark returned by log_mark in metrics.mark.
+        max_lines: Most lines to return, 1 to 50; errors come first.
+        include_info: Also return ordinary information lines (Display and Log), in the order logged.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">mark</code></td>
+<td>integer</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">max_lines</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">include_info</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">log_mark</code></h3>
+<p>Marks the editor log now; log_since then reports only what is logged after the mark.</p>
+<h3><code class="short">capture_from</code></h3>
+<p>Captures the level from a camera you place, or framing one actor, as a verified PNG.</p>
+<pre><code>    Args:
+        location: Camera location in centimetres (ignored when focus is set).
+        rotation: Camera rotation in degrees (ignored when focus is set).
+        focus: Label, name or path of an actor to frame from above and in front.
+        width: Image width in pixels; 0 uses the Thumbnail Size setting.
+        height: Image height in pixels; 0 makes the image 16:9.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">location</code></td>
+<td>object</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">rotation</code></td>
+<td>object</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">focus</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">width</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">height</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">capture_viewport</code></h3>
+<p>Captures what the active level viewport shows, as a verified PNG in the evidence folder.</p>
+<pre><code>    Args:
+        width: Image width in pixels; 0 uses the Thumbnail Size setting.
+        height: Image height in pixels; 0 makes the image 16:9.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">width</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">height</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h2>agent_toolkit_lite.input.InputTools</h2>
+<p>Enhanced Input: create input actions and mapping contexts, map keys, and make contexts active for players.</p>
+<h3><code class="short">add_to_player</code></h3>
+<p>Makes a mapping context active for every player from the next Play (Project Settings default contexts).</p>
+<pre><code>    Args:
+        context: Path of the input mapping context, under /Game/.
+        priority: Higher priorities win when two contexts map the same key; an already listed context gets this priority.
+        dry_run: default, none or plan (plan only lists what would change).
+        confirm_token: The token from the preview of a destructive call, to apply it.
+        source_control_approved: The user agreed to check out the files (Ask First source control policy).
+</code></pre>
+<p>Dry run: plan. Undo: one step.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">context</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">priority</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">confirm_token</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">map</code></h3>
+<p>Maps keys to an input action in a mapping context, one undo step for the whole call.</p>
+<pre><code>    Args:
+        context: Path of the input mapping context.
+        action: Path of the input action.
+        keys: Key names, for example LeftShift, SpaceBar, Gamepad_LeftTrigger.
+        modifiers: Optional comma-separated modifiers for every key: negate, swizzle, dead_zone, smooth.
+        triggers: Optional comma-separated triggers for every key: down, pressed, released, hold, tap.
+        replace: Remove the action's earlier mappings in this context first.
+        dry_run: default, none or plan (plan only lists what would change).
+        confirm_token: The token from the preview of a destructive call, to apply it.
+        source_control_approved: The user agreed to check out the files (Ask First source control policy).
+</code></pre>
+<p>Dry run: plan. Undo: one step.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">context</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">action</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">keys</code></td>
+<td>array</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">modifiers</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">triggers</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">replace</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">confirm_token</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">active_contexts</code></h3>
+<p>Lists the mapping contexts a player has right now in Play In Editor, highest priority first.</p>
+<pre><code>    Args:
+        player: Index of the local player; 0 is the first player.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">player</code></td>
+<td>integer</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">describe</code></h3>
+<p>Lists the key mappings of an input mapping context and the keys that more than one mapping uses.</p>
+<pre><code>    Args:
+        context: Path of the input mapping context, for example /Game/Input/IMC_Default.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">context</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">create_context</code></h3>
+<p>Creates an input mapping context asset. Creating an asset can't be undone with Ctrl+Z; delete it to revert.</p>
+<pre><code>    Args:
+        path: New asset path, for example /Game/Input/IMC_Default.
+        description: Optional text shown in the editor for this context.
+        dry_run: default, none or plan (plan only lists what would be created).
+        confirm_token: The token from the preview of a destructive call, to apply it.
+        source_control_approved: The user agreed to check out the files (Ask First source control policy).
+</code></pre>
+<p>Dry run: plan. Undo: not undoable (it creates an Input Mapping Context asset).</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">path</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">description</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">confirm_token</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table>
+<h3><code class="short">create_action</code></h3>
+<p>Creates an input action asset. Creating an asset can't be undone with Ctrl+Z; delete it to revert.</p>
+<pre><code>    Args:
+        path: New asset path, for example /Game/Input/IA_Sprint.
+        value_type: bool, axis1d, axis2d or axis3d.
+        description: Optional text shown in the editor for this action.
+        dry_run: default, none or plan (plan only lists what would be created).
+        confirm_token: The token from the preview of a destructive call, to apply it.
+        source_control_approved: The user agreed to check out the files (Ask First source control policy).
+</code></pre>
+<p>Dry run: plan. Undo: not undoable (it creates an Input Action asset).</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code class="short">path</code></td>
+<td>string</td>
+<td>yes</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">value_type</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">description</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">dry_run</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">confirm_token</code></td>
+<td>string</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+<tr>
+<td><code class="short">source_control_approved</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>see above</td>
+</tr>
+</tbody>
+</table></section></body></html>

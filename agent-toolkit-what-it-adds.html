@@ -1,0 +1,1143 @@
+<!doctype html><html><head><meta charset="utf-8"><title>What Agent Toolkit adds</title><style>body{font-family:Segoe UI,Arial,sans-serif;max-width:900px;margin:2em auto;line-height:1.5;color:#222}section{break-before:page}section:first-of-type{break-before:auto}h1,h2,h3,h4{break-after:avoid;page-break-after:avoid}table{border-collapse:collapse;margin:1em 0;font-size:0.85em}td,th{border:1px solid #bbb;padding:4px 5px;vertical-align:top}tr{break-inside:avoid}code,pre{background:#f4f4f4}code{overflow-wrap:anywhere}code.short{white-space:nowrap;overflow-wrap:normal}pre{padding:8px;white-space:pre-wrap}img{max-width:100%}</style></head><body><section id="what-it-adds"><h1>What Agent Toolkit adds</h1>
+<p>An AI agent can already change an Unreal project without this plugin. Epic's MCP server serves Epic's general
+toolsets once their plugins are on, Python remote execution runs any editor Python, and the agent can edit the
+project's files. This chapter shows what changes when Agent Toolkit is installed: measured on real tasks, with
+examples. It grows with every domain.</p>
+<h2>How it was measured</h2>
+<ul>
+<li><strong>The agent:</strong> Claude Code 2.1.319 with Claude Opus 5.5, running headless on Unreal Engine 5.8.4 (changelist
+  58902052). Nobody answers its questions.</li>
+<li><strong>The plugin:</strong> Agent Toolkit 0.1.0 at the release candidate, commit e0ecb48.</li>
+<li><strong>The same tools in every run:</strong> Epic's MCP server with all of Epic's toolsets (the All Toolsets plugin on), Python
+  remote execution and the project's files. In every setup the agent's shell is allowed <code class="short">python</code> commands only, so
+  some other commands were refused, and the agent's file tools are refused Agent Toolkit's own folder; a run that
+  reached it anyway is left out (see below).</li>
+<li><strong>The same prompts in three setups:</strong><ul>
+<li><em>without</em>: the editor without Agent Toolkit;</li>
+<li><em>with</em>: Agent Toolkit installed, nothing else changed;</li>
+<li><em>with + instruction</em>: Agent Toolkit plus the instruction from the quick start (step 4).</li>
+</ul>
+</li>
+<li><strong>Checked after every run,</strong> on the editor and the files, not on what the agent says:<ul>
+<li>Is the task really done?</li>
+<li>Does Ctrl+Z take the change back?</li>
+<li>Did the agent claim a success it didn't have?</li>
+<li>Did the editor survive?</li>
+</ul>
+</li>
+<li><strong>Sixteen tasks, two runs per task and setup.</strong> Turns, tool calls, tokens, time and cost are medians of the two
+  runs. Tokens count everything the model read and wrote, cached or not. Cost is API-equivalent, that is what the run
+  would cost on the Claude API.</li>
+<li><strong>Runs that don't measure an ordinary project aren't counted.</strong> A run without the plugin that read Agent Toolkit's
+  own files, or a run that called the test project's own helper code, is left out and run again.</li>
+<li><strong>Runs done again in this pass:</strong><ul>
+<li>One landscape run without the plugin crashed the editor, in the agent's own Python after 111 turns. The task
+  was run again and the table counts the new runs, which favours the setup without the plugin.</li>
+<li>The comparison's own Ctrl+Z check crashed the editor once, after a Smart Objects run without the plugin, while it
+  undid a Blueprint the agent had made. That task was run again.</li>
+<li>Both first runs without the plugin in the World Partition corner task read Agent Toolkit's files: the agent
+  searched the plugin's folder for "landscape". They were left out and run again.</li>
+</ul>
+</li>
+<li><strong>Two checks were aligned with their prompts after the pass,</strong> by the publisher's decision: an answer that ends with
+  "Started: yes" on the last line of its summary, not on a line of its own, answers the package task; and a
+  measurement with the toolkit's <code class="short">stat_snapshot</code>, which writes no file, counts as a profile measurement, as a capture
+  file does. Every run was then checked again from its report and transcript. Five runs changed result, one without
+  the plugin and four with it.</li>
+<li><strong>The machine:</strong> AMD Ryzen 9 5950X (16 cores), NVIDIA GeForce RTX 3090, 64 GB RAM, Windows 10. Times depend on the
+  machine. Cost, tokens and results depend mostly on the model and on the tools' answers, though a slower machine can
+  add a few waiting turns on long jobs such as packaging and cooking.</li>
+<li>Measured on 2026-11-07 (pass 2026-11-07-e0ecb48).</li>
+</ul>
+<h2>Results</h2>
+<p>With the quick start's instruction, the agent did the task in every run on all 16 tasks; without the plugin, it did so
+on 12 tasks. With the instruction, no run crashed the editor or claimed a success it didn't have, and Ctrl+Z took the
+change back in every run that checks it. Its cost was lower on 13 of the 16 tasks, and the medians add up to $4.36
+API-equivalent against $20.96 without the plugin: 21 %. It used fewer tokens on 12 tasks.</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Agent Toolkit</th>
+<th>Runs</th>
+<th>Task done</th>
+<th>Ctrl+Z works</th>
+<th>False successes</th>
+<th>Editor crashes</th>
+<th>Turns</th>
+<th>Tool calls</th>
+<th>Tokens</th>
+<th>Time</th>
+<th>API-equivalent cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sprint input on Left Shift and the left trigger, for every player, saved</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>0/2</td>
+<td>0</td>
+<td>0</td>
+<td>27</td>
+<td>25</td>
+<td>463,822</td>
+<td>76 s</td>
+<td>$0.47</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>19</td>
+<td>17</td>
+<td>289,983</td>
+<td>45 s</td>
+<td>$0.31</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>16.5</td>
+<td>14.5</td>
+<td>283,656</td>
+<td>37 s</td>
+<td>$0.27</td>
+</tr>
+<tr>
+<td>Show the cube from above as a PNG, and report the level's problems</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>23</td>
+<td>21</td>
+<td>843,886</td>
+<td>114 s</td>
+<td>$0.71</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>12</td>
+<td>10</td>
+<td>191,343</td>
+<td>51 s</td>
+<td>$0.25</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>196,903</td>
+<td>49 s</td>
+<td>$0.31</td>
+</tr>
+<tr>
+<td>Play the level, save what the player sees, stop</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>23.5</td>
+<td>21.5</td>
+<td>743,502</td>
+<td>65 s</td>
+<td>$0.63</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+<td>7</td>
+<td>120,094</td>
+<td>25 s</td>
+<td>$0.17</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+<td>6</td>
+<td>102,551</td>
+<td>21 s</td>
+<td>$0.14</td>
+</tr>
+<tr>
+<td>A navmesh for a level, and where an NPC at the start can walk</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>33.5</td>
+<td>31.5</td>
+<td>2,287,666</td>
+<td>229 s</td>
+<td>$1.32</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>14</td>
+<td>12</td>
+<td>190,080</td>
+<td>81 s</td>
+<td>$0.26</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>13</td>
+<td>11</td>
+<td>162,648</td>
+<td>31 s</td>
+<td>$0.22</td>
+</tr>
+<tr>
+<td>A bench two NPCs can sit on (a Smart Object), definition saved</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>0/2</td>
+<td>0</td>
+<td>0</td>
+<td>36.5</td>
+<td>34.5</td>
+<td>1,084,385</td>
+<td>168 s</td>
+<td>$0.91</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>16.5</td>
+<td>14.5</td>
+<td>317,062</td>
+<td>73 s</td>
+<td>$0.31</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>20.5</td>
+<td>18.5</td>
+<td>404,099</td>
+<td>73 s</td>
+<td>$0.35</td>
+</tr>
+<tr>
+<td>A 20 m hill, rock on the slopes steeper than 30 degrees, and the rock's share</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>102.5</td>
+<td>100.5</td>
+<td>8,635,886</td>
+<td>636 s</td>
+<td>$3.91</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>10.5</td>
+<td>8.5</td>
+<td>194,151</td>
+<td>55 s</td>
+<td>$0.23</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+<td>7</td>
+<td>165,271</td>
+<td>36 s</td>
+<td>$0.20</td>
+</tr>
+<tr>
+<td>A forest of cone trees in a 50 m circle, standing on the ground, counted</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>0/2</td>
+<td>0</td>
+<td>0</td>
+<td>9.5</td>
+<td>7.5</td>
+<td>129,154</td>
+<td>64 s</td>
+<td>$0.24</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>10.5</td>
+<td>8.5</td>
+<td>161,801</td>
+<td>39 s</td>
+<td>$0.20</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+<td>7</td>
+<td>116,838</td>
+<td>34 s</td>
+<td>$0.17</td>
+</tr>
+<tr>
+<td>A MetaSound that beeps at 440 Hz for 1 s and stops, and its peak level</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>19.5</td>
+<td>17.5</td>
+<td>320,952</td>
+<td>96 s</td>
+<td>$0.39</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>113,294</td>
+<td>24 s</td>
+<td>$0.17</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>7</td>
+<td>5</td>
+<td>85,856</td>
+<td>19 s</td>
+<td>$0.16</td>
+</tr>
+<tr>
+<td>Footsteps: a cue picking one of three sounds with the pitch varying by 10 %, silent at 20 m</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>1/2</td>
+<td>0</td>
+<td>0</td>
+<td>63.5</td>
+<td>60</td>
+<td>3,224,008</td>
+<td>315 s</td>
+<td>$1.95</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>10.5</td>
+<td>8.5</td>
+<td>176,765</td>
+<td>31 s</td>
+<td>$0.22</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+<td>7</td>
+<td>130,663</td>
+<td>23 s</td>
+<td>$0.19</td>
+</tr>
+<tr>
+<td>Retarget the Mannequin's idle, walk and run to another skeleton, and give their frame counts</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>16</td>
+<td>14</td>
+<td>213,577</td>
+<td>81 s</td>
+<td>$0.40</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>15</td>
+<td>13</td>
+<td>218,009</td>
+<td>55 s</td>
+<td>$0.28</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>16</td>
+<td>14</td>
+<td>255,501</td>
+<td>46 s</td>
+<td>$0.29</td>
+</tr>
+<tr>
+<td>An Animation Blueprint that goes from Idle to Move when Speed passes 10, and back</td>
+<td>without</td>
+<td>2</td>
+<td>1/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>192.5</td>
+<td>189</td>
+<td>18,904,467</td>
+<td>900 s</td>
+<td>$7.03</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>162,802</td>
+<td>49 s</td>
+<td>$0.26</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>12</td>
+<td>10</td>
+<td>192,414</td>
+<td>46 s</td>
+<td>$0.28</td>
+</tr>
+<tr>
+<td>A 10 m hill in the unloaded corner of a World Partition landscape, as one undo step, nothing else changed</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>35</td>
+<td>33</td>
+<td>906,642</td>
+<td>277 s</td>
+<td>$1.00</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>11</td>
+<td>9</td>
+<td>207,839</td>
+<td>51 s</td>
+<td>$0.26</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+<td>6</td>
+<td>140,875</td>
+<td>31 s</td>
+<td>$0.22</td>
+</tr>
+<tr>
+<td>Three unloaded houses of a World Partition level in a new runtime data layer, unloaded at start, saved</td>
+<td>without</td>
+<td>2</td>
+<td>2/2</td>
+<td>0/2</td>
+<td>0</td>
+<td>0</td>
+<td>11.5</td>
+<td>9.5</td>
+<td>118,330</td>
+<td>59 s</td>
+<td>$0.18</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>1/2</td>
+<td>0</td>
+<td>0</td>
+<td>14.5</td>
+<td>12.5</td>
+<td>197,612</td>
+<td>44 s</td>
+<td>$0.22</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>2/2</td>
+<td>0</td>
+<td>0</td>
+<td>14.5</td>
+<td>12.5</td>
+<td>259,828</td>
+<td>41 s</td>
+<td>$0.27</td>
+</tr>
+<tr>
+<td>Cook BuildRoom and BuildYrad for Windows, and say which of them made it into the cook</td>
+<td>without</td>
+<td>2</td>
+<td>0/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>108,823</td>
+<td>49 s</td>
+<td>$0.21</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>26</td>
+<td>24</td>
+<td>505,161</td>
+<td>65 s</td>
+<td>$0.38</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>21.5</td>
+<td>19.5</td>
+<td>397,408</td>
+<td>102 s</td>
+<td>$0.33</td>
+</tr>
+<tr>
+<td>Package for Windows into a new folder under Saved, and check that the game starts</td>
+<td>without</td>
+<td>2</td>
+<td>0/2</td>
+<td>-</td>
+<td>1</td>
+<td>0</td>
+<td>10</td>
+<td>8</td>
+<td>140,993</td>
+<td>102 s</td>
+<td>$0.21</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>37</td>
+<td>33</td>
+<td>963,712</td>
+<td>65 s</td>
+<td>$0.55</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>33.5</td>
+<td>28</td>
+<td>830,652</td>
+<td>89 s</td>
+<td>$0.49</td>
+</tr>
+<tr>
+<td>Measure Play, show the Heavy folder in game, measure again, and say whether it got slower</td>
+<td>without</td>
+<td>2</td>
+<td>1/2</td>
+<td>-</td>
+<td>1</td>
+<td>0</td>
+<td>45.5</td>
+<td>43.5</td>
+<td>2,529,890</td>
+<td>165 s</td>
+<td>$1.40</td>
+</tr>
+<tr>
+<td></td>
+<td>with</td>
+<td>2</td>
+<td>1/2</td>
+<td>-</td>
+<td>1</td>
+<td>0</td>
+<td>24</td>
+<td>22</td>
+<td>508,316</td>
+<td>117 s</td>
+<td>$0.43</td>
+</tr>
+<tr>
+<td></td>
+<td>with + instruction</td>
+<td>2</td>
+<td>2/2</td>
+<td>-</td>
+<td>0</td>
+<td>0</td>
+<td>23.5</td>
+<td>21.5</td>
+<td>509,831</td>
+<td>111 s</td>
+<td>$0.46</td>
+</tr>
+</tbody>
+</table>
+<p>A task is done when every check of the task passed; Ctrl+Z is counted apart. A false success is a run that said it was
+done while a check of the task failed.</p>
+<p>The sprint input was checked in the running editor, in <code class="short">Config/DefaultInput.ini</code> and in Play. The images were checked
+on disk, for an exposure that is neither black nor washed out, and the report for the actor that has no mesh. For the
+navmesh task, "Ctrl+Z works" means an edit you made before asking can still be undone after the build. The bench task's
+seats were checked in Play, where NPCs look for them.</p>
+<p>The hill was checked at its centre and 150 m away, the paint on samples of steep and gentle ground, and the rock share
+against the 2.34 % the check measures. The trees were counted in the circle, and samples of them were checked for
+standing on the ground.</p>
+<p>Creating an asset is not an undo step in Unreal, so the beep and the animation tasks have no Ctrl+Z column; in the
+footsteps task, Ctrl+Z must take back the attenuation set on the cue. The comparison renders the beep itself and
+compares the agent's peak with its own. The retargeted clips were checked against their sources: skeleton, frames,
+length and motion. The state machines were checked by running each Blueprint on the Mannequin with Speed at 0, 15, 300
+and 5, reading its states and the feet.</p>
+<p>The World Partition tasks start from a saved level reopened with most of it unloaded. In the corner task one of the
+landscape's 16 parts, away from the corner, was already loaded, though the prompt says none is. The hill was checked by
+loading every part of the landscape afterwards and measuring the ground every 12 m, and the houses' layer from the
+level's files as saved, not from memory.</p>
+<p>A build changes nothing in the editor, so the build tasks have no Ctrl+Z column. The cook was checked from the
+cooker's own list of what it cooked, written during the run; the package from its files under <code class="short">Saved</code>, written during
+the run, and from the processes left: no packaged game was still running after any run. BuildYrad doesn't exist, and
+every run said so. A material the user had changed and not saved was still unsaved after every cook run.</p>
+<p>Without the plugin, both cook runs stopped before cooking: the shell command that starts Epic's cooker was refused,
+since the agent's shell is allowed <code class="short">python</code> commands only, and neither agent started the cooker another way. One said
+that starting it from the editor's Python would get around the refusal. One package run without the plugin started
+Epic's UAT and then the game from the editor's Python, and saw the game start, but it didn't end its answer with the
+line the prompt asks for: it isn't counted as done, and since it said it was done it counts as a false success. The
+other package run had its first shell command refused, concluded that it couldn't run Python either, and stopped,
+answering "Started: no".</p>
+<p>The profiling task was checked on the level and the files: every actor of the Heavy folder visible in game and nothing
+else changed, Play stopped, a measurement, and the answer's last lines (the median frame time before and after, and
+whether it got slower). A measurement is a capture file under <code class="short">Saved</code> written during the run, which any setup can make,
+or a call of one of the toolkit's measuring tools. One run without the plugin timed the frames with its own Python timer
+and left neither: its answer was right, but it isn't counted as done, and it counts as a false success. With the plugin
+but without the instruction, one run answered "Slower: no" (see the examples below). The comparison sets Play's window
+to 1280 x 720 before every run.</p>
+<h2>What it adds, with examples</h2>
+<p>Times and costs below are medians, with the quick start's instruction against without the plugin, unless a sentence
+says otherwise.</p>
+<h3>The editor stayed up</h3>
+<p>No run with Agent Toolkit crashed the editor: 64 runs, with and without the instruction. Without the plugin, one
+landscape run crashed it, in the agent's own Python after 111 turns; that run was done again and isn't in the table.</p>
+<h3>Ctrl+Z takes the agent's work back</h3>
+<p>Every Agent Toolkit edit is one undo step; new assets and files written to disk can't be undone, and each answer says
+whether its change can be. In the sprint task, Ctrl+Z removed the key mappings and the project-wide
+context in every run with the plugin, with or without the instruction. With the instruction the task also took 37 s
+instead of 76 s, and $0.27 instead of $0.47 API-equivalent.</p>
+<p>Without the plugin, the agent did the same task just as well with Epic's MCP tools, but Ctrl+Z took nothing back: the
+check found no undo step after either run.</p>
+<ul>
+<li>Epic's object tool set the key mappings without recording an undo step.</li>
+<li>Epic's settings tool writes the setting straight to the config file.</li>
+</ul>
+<h3>Evidence in fewer steps</h3>
+<ul>
+<li><strong>Capture and map check:</strong> with the toolkit, the agent finished in 49 s instead of 114 s, at under half the cost.
+  It took 10 turns instead of 23.</li>
+<li><strong>Play capture:</strong> 21 s instead of 65 s, at under a quarter of the cost.</li>
+</ul>
+<p>Without the plugin, the agent spent its turns finding a way to make an image and read the map check:</p>
+<ul>
+<li>in one evidence run, 5 calls failed and one returned an image too large to read before the agent typed a screenshot
+  command into the editor's console box with Epic's Slate inspector; it left your viewport camera at the top-down view;</li>
+<li>the other evidence run spawned a capture camera from Python and deleted it afterwards;</li>
+<li>both evidence runs ran the map check as a console command and read its messages from the editor log;</li>
+<li>both Play runs had a shell command refused and typed a screenshot command into the editor's console box.</li>
+</ul>
+<p>With the plugin:</p>
+<ul>
+<li><code class="short">evidence.capture_from</code> renders from any camera without touching your viewport, and checks the image before it
+  reports it;</li>
+<li><code class="short">evidence.map_check</code> runs the editor's map check on the current level and returns the errors and warnings as data,
+  for example <code>StaticMeshActor_2 Static mesh actor has NULL StaticMesh property</code>;</li>
+<li><code class="short">evidence.pie_start</code>, <code class="short">pie_capture</code> and <code class="short">pie_stop</code> each answer once the editor is in the state they report.</li>
+</ul>
+<h3>Navigation in half a minute</h3>
+<p>With the quick start's instruction, the agent gave the level a navmesh and answered where an NPC can walk in 31 and 32
+seconds, with no failed calls. The answers were right in every run, with and without the plugin: the strip behind the
+wall and the platform are reachable, the inside of the closed box isn't.</p>
+<p>Without the plugin, the time depended on the way the agent found. One run used Python remote execution and finished in
+50 seconds, for less than a run with the plugin cost. The other had its first shell command refused and went on with
+Epic's MCP tools: the editor's navigation test actors never found a path, and the agent ended up typing Python into the
+editor's console box. Five of its calls failed, and the run took almost seven minutes. Both runs:</p>
+<ul>
+<li>spawned a navigation bounds volume and sized it by hand;</li>
+<li>rebuilt the navmesh with a console command;</li>
+<li>wrote their own path queries in Python.</li>
+</ul>
+<p>With the plugin:</p>
+<ul>
+<li><code class="short">nav.ensure_bounds</code> covers the level's geometry and adds a volume only when one is needed;</li>
+<li><code class="short">nav.build</code> answers once the navmesh is built, without the editor's Build Paths, which clears your undo history;</li>
+<li><code class="short">nav.path_test</code> says whether a place is reachable and, when it isn't, why: in the box, the end is on another
+  island;</li>
+<li><code class="short">nav.coverage</code> measures the walkable area and draws the islands on a picture.</li>
+</ul>
+<h3>Smart Objects in under half the time, and undoable</h3>
+<p>Without the plugin, the agent made a correct bench in both runs, but it took almost three minutes and about 35 calls,
+6 and 9 of them failing, and Ctrl+Z couldn't remove the Smart Object component afterwards. Python can't set a seat's
+offset, rotation or ID directly; one agent set them through text import. With the instruction it took 73 seconds, at
+under half the cost, and Ctrl+Z removed the component in both runs.</p>
+<p>With the plugin:</p>
+<ul>
+<li><code>smart_objects.create_definition</code> makes the definition from a list of seats and checks that it loads and passes
+  validation;</li>
+<li><code class="short">smart_objects.attach</code> adds the component to the actor as one undo step and checks that the seats can be found;</li>
+<li><code class="short">smart_objects.query</code> lists the Smart Objects and free seats around a point.</li>
+</ul>
+<h3>Terrain in under a minute, instead of ten</h3>
+<p>With the plugin, the agent raised the hill, painted grass and rock and reported the rock's share (2.4 %, measured
+2.34 %) in every run; with the instruction it took 33 and 39 seconds and 9 turns. Ctrl+Z took everything back.</p>
+<p>Without it, the agent finished too, in both runs, but it took 8 and 13 minutes, 113 and 92 turns, and $3.60 and $4.23
+API-equivalent. It drew the hill and the paint into render targets with materials it wrote, and imported them with Epic's Python.
+Python can't add a paint layer to a landscape, so in both runs the agent created the layers by driving Landscape mode's
+panel with Epic's UI tools. Ctrl+Z took those runs back too. A third run, which isn't counted, crashed the editor.</p>
+<p>With the plugin:</p>
+<ul>
+<li><code class="short">landscape.sculpt_region</code> raises the terrain by an exact amount, with a falloff, as one undo step, and reads the
+  heights back;</li>
+<li><code class="short">landscape.paint_layer</code> creates the layer when the landscape lacks it and paints by slope, height or mask, the other
+  layers giving way, with the coverage measured on the result;</li>
+<li>every edit goes into the toolkit's own edit layer, so your layers stay as they were.</li>
+</ul>
+<h3>A forest that Ctrl+Z removes</h3>
+<p>Both setups planted 785 trees and counted them right. With the plugin it took 34 seconds instead of 64, and $0.17
+instead of $0.24 API-equivalent, and Ctrl+Z removed the trees in every run. Without it, the agent added the instances from Python with
+a line trace for each tree; that path records no undo step, so after the task the trees could only be deleted by hand.</p>
+<h3>Sounds checked, though the agent can't listen</h3>
+<p>With the plugin, the agent built the beep and reported its peak from the toolkit's offline render: 0.0 dBFS, a 1.01 s
+tone that stops by itself, in every run, in 18 to 29 seconds. With the instruction, building it took one call.</p>
+<p>Without it, the agent built a correct beep through Epic's MetaSound builder in both runs, but couldn't measure it. Both
+recorded the editor's output while the beep played, and both recordings peaked at -9.0 dBFS, 9 dB below the sound
+itself. Both agents then answered 0 dBFS from the sine's full-scale setting, which was right; one said it hadn't
+measured the signal itself. The runs took about a minute and a half, at about two and a half times the cost.</p>
+<p>With the plugin:</p>
+<ul>
+<li><code>metasound.build_from_spec</code> checks the whole spec before anything is created, renders the new MetaSound offline with
+  its own generator, and answers its peak, RMS, start, length and clipping;</li>
+<li><code class="short">audio.render_check</code> does the same for any sound, with a waveform picture for the agent;</li>
+<li>a WAV of what was measured is saved for you to listen to.</li>
+</ul>
+<h3>Footsteps in 23 seconds instead of five minutes, and Ctrl+Z works</h3>
+<p>Both setups made the cue and the attenuation right in every run. Without the plugin, both agents found that Python
+couldn't build the cue's graph in the Sound Cue editor. One let Epic's Sound Cue factory make the random node and the
+three wave players, then added the modulator by dragging it in the Sound Cue editor with Epic's UI tools: two and a
+half minutes. The other built the tree in Python first, found that the editor showed an empty graph, and rebuilt it
+through the Sound Cue editor: about 50 calls of Epic's UI tools, 102 turns and 8 minutes. Ctrl+Z took the attenuation
+back in one of the two runs.</p>
+<p>With the plugin it took 23 seconds at about a tenth of the cost, and Ctrl+Z took the attenuation back in every run:</p>
+<ul>
+<li><code class="short">soundcue.create</code> builds the whole tree in one call, checks it node by node and renders it;</li>
+<li><code class="short">audio.create</code> makes the attenuation and reports its gain at the source, halfway and at the end of its falloff;</li>
+<li><code class="short">audio.assign</code> sets it on the cue as one undo step and says when another setting would override it.</li>
+</ul>
+<h3>Retargeting in under a minute</h3>
+<p>Both setups retargeted the three clips right in every run: the frame counts and lengths of the sources, and an idle, a
+walk and a run that move as the Mannequin's do, scaled to the taller character. Without the plugin, the agent built the
+IK rigs, the retargeter and the batch through Epic's Python in about 80 seconds, and checked the result by its numbers
+only: neither run made a picture.</p>
+<p>With the plugin it took 46 seconds, at about three quarters of the cost:</p>
+<ul>
+<li><code class="short">retarget.create</code> makes the retargeter, and an IK rig for each character from the engine's skeleton template, maps
+  the chains and shows both characters side by side in a picture;</li>
+<li><code class="short">retarget.batch</code> checks every new clip against its source: skeleton, frames, length, rate and motion;</li>
+<li><code class="short">animation.pose_thumbnail</code> shows a pose of a new clip on its character.</li>
+</ul>
+<h3>A state machine in under a minute, instead of fifteen minutes of mouse input</h3>
+<p>With the plugin, the agent built the Animation Blueprint from one spec, and the same call ran it outside Play with a
+Speed timeline: Idle, Move, Idle, in under a minute in every run. In three of four runs, the first spec used a key the
+tool doesn't take; the tool refused it before making anything and named the keys it takes.</p>
+<p>Without it, the agent can't add states or transitions to a state machine: neither Epic's Python nor its MCP tools can.
+Both runs drove the editor's interface instead. One built the states but couldn't draw the transitions with Epic's
+Slate inspector, and stopped after 196 turns and 14 minutes, saying the Blueprint wasn't finished. The other drew the
+transitions with mouse input sent from a Python script; its Blueprint was right, after 189 turns, 16 minutes and about
+25 times the cost.</p>
+<p>With the plugin:</p>
+<ul>
+<li><code class="short">animbp.create_from_spec</code> checks the whole spec (variables, clips, blend spaces, rules) before anything is made,
+  then builds and compiles the Blueprint; given a timeline of variable values, it also runs it as <code class="short">animbp.simulate</code>
+  does;</li>
+<li><code class="short">animbp.simulate</code> runs it offscreen on a timeline of variable values and reports each state change, with pictures,
+  and leaves nothing changed;</li>
+<li><code class="short">animbp.verify_in_pie</code> checks the same in Play.</li>
+</ul>
+<h3>An unloaded corner of the world in half a minute instead of four and a half minutes</h3>
+<p>On a World Partition level, the part of the landscape the agent must change usually isn't loaded. Both setups raised
+the hill right in every run, as one undo step, and changed nothing else. Without the plugin, the agent loaded the
+corner's landscape part, drew the heights into a render target with a temporary material and wrote them with the
+engine's heightmap import inside one transaction: almost four and five and a half minutes, 28 and 42 turns.</p>
+<p>With the plugin it took 26 and 35 seconds, at about a fifth of the cost: <code class="short">landscape.sculpt_region</code> loads the area it
+needs by itself, keeps your undo history, makes the change one undo step, and reads the heights back. In this task it
+loaded four landscape parts and gave them its own edit layer, so a later save would write them too, though only the
+corner's heights changed; every agent with the plugin said so. Every other World Partition change works the same way:
+foliage, navigation, data layers and Smart Objects load what they need, and <code class="short">world_partition.save</code> writes the files
+with unsaved changes, and only those, with no dialog.</p>
+<h3>A build that says what it really did</h3>
+<p>Epic's cooker skips a level it can't find with only a warning, and a package can end with exit code 0 without every
+file a game needs. With the plugin, <code class="short">settings_check</code> refused the misspelled level by name before anything started, in
+every cook run, and the pre-checks named the unsaved material: every agent then cooked without it, with
+<code class="short">ignore_unsaved</code>, instead of saving your work. Each answer was checked against what the build left: the cooker's own
+list for the cook, and for the package every file a Win64 game must hold, written by this build, then the game started
+once, headless, until it reached its first level, with nothing left running.</p>
+<p>The build runs as a job, so the editor stays usable meanwhile and only saving waits. In every package run with the
+plugin, the build took about a minute and the game reached its first level in the launch check.</p>
+<h3>A slowdown measured, with the conditions said</h3>
+<p>Without the plugin, both agents found the slowdown: the median frame time rose from about 10 ms to 19 ms, 88 %. One had
+its first shell command refused and went on with Epic's MCP tools alone: it started <code class="short">csvprofile frames=600</code> by typing
+it into the editor's console box with Epic's Slate inspector, then read the frame times back from the CSV file: 46
+turns and $1.40 API-equivalent. The other timed the frames with its own Python timer, after turning off the frame-rate cap and vsync,
+and kept no capture.</p>
+<p>With the plugin, <code class="short">csv_capture</code> records Play with Unreal's CSV profiler in one call, leaving out the warm-up frames, and
+<code class="short">stat_snapshot</code> samples the same numbers without writing a file. Both answer with the median, the thread that bounds
+the frame, the GPU time and the conditions they measured under, and <code class="short">csv_capture</code> adds a chart. Every agent with the
+plugin said what its numbers were taken under, and that in Play the editor's own work set the frame time: the game
+thread took 13 to 15 ms. The GPU's extra time (from about 3.3 to 6.5 ms) barely showed: the median rose by 0.37 to
+2.26 ms. Three of the four runs said it got slower. The fourth, without the instruction, found
+two measurements of the same state 0.36 ms apart and answered "Slower: no" for a rise of 0.37 ms; the check counts that
+answer as wrong. Several agents pointed to a standalone game for a clearer number, and <code class="short">game_capture</code> measures one as a
+job.</p>
+<p>The two setups didn't measure the same frame. The runs without the plugin started Play in the editor's large level
+viewport, while the agents with the plugin played in the project's 1280 x 720 Play window; with more pixels, the GPU
+did more work (5.0 ms before, 16.8 ms after, in the run that kept a CSV capture). A separate check on the same scene
+found the same frame with Unreal's own CSV profiler, <code class="short">stat_snapshot</code> and <code class="short">csv_capture</code>, and with or without Agent
+Toolkit installed: the plugin adds no cost to Play. In that check and in every run with the plugin, the editor
+reported the render thread as 0 ms, Unreal's own profiler included.</p>
+<p>With the instruction, a run took about two minutes and $0.46 API-equivalent, against nearly three minutes and $1.40
+without the plugin.</p>
+<h3>Safer settings</h3>
+<p>To make the sprint context active for every player, the agent without the plugin used Epic's settings tool. That tool
+replaces the whole list of default contexts, and the change goes straight to <code class="short">Config/DefaultInput.ini</code>. In a project
+that already has default contexts, the list it writes is the only one left.</p>
+<p>Agent Toolkit's <code class="short">input.add_to_player</code> adds to the list or updates it, and can be undone. Nothing reaches the file
+until <code class="short">evidence.save_assets</code> writes it after the source-control check.</p>
+<h3>Mistakes caught before they cost you</h3>
+<p>Agent Toolkit tools check what they are given and say how to fix it. In this pass they refused, before anything
+changed, a level that doesn't exist (every cook run with the plugin), a gameplay tag the project doesn't define (every
+bench run with the plugin) and an Animation Blueprint spec with a key they don't take (three state machine runs of
+four), and each answer said what to change. Other checks:</p>
+<ul>
+<li><strong>A misspelled key</strong> such as <code class="short">LeftShfit</code> is refused, with the right name suggested. In Python, a misspelled key makes
+  a mapping that never fires.</li>
+<li><strong>A mapping context stored in a plugin</strong> can't be a default context, because Enhanced Input applies default
+  contexts from game content only. The tool refuses it instead of failing silently.</li>
+<li><strong>A change while Play is running</strong> is refused, so the agent doesn't edit the level the game is using.</li>
+</ul>
+<h2>Code mode: many similar calls in one script</h2>
+<p>Epic's code mode lets the agent put many tool calls in one <code class="short">execute_tool_script</code> script (see "Many calls at once" in
+Concepts). It was measured on three bulk tasks with the quick start's instruction, in two setups: <em>code mode hidden</em>
+(the editor launched with Epic's programmatic toolset blocked) and <em>code mode available</em>. Two runs per task and setup,
+Claude Opus 5.5, Unreal Engine 5.8.4, 2026-11-04; medians, cost API-equivalent.</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Code mode</th>
+<th>Runs</th>
+<th>Task done</th>
+<th>Turns</th>
+<th>Time</th>
+<th>Input tokens</th>
+<th>Output tokens</th>
+<th>Cost</th>
+<th>Scripts written</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Test whether each of 24 probes can be reached on foot from the PlayerStart, and list the ones that can't</td>
+<td>hidden</td>
+<td>2</td>
+<td>2/2</td>
+<td>31.5</td>
+<td>56 s</td>
+<td>160,676</td>
+<td>5,742</td>
+<td>$0.31</td>
+<td>0</td>
+</tr>
+<tr>
+<td></td>
+<td>available</td>
+<td>2</td>
+<td>2/2</td>
+<td>9.5</td>
+<td>36 s</td>
+<td>120,050</td>
+<td>2,992</td>
+<td>$0.19</td>
+<td>1 and 2</td>
+</tr>
+<tr>
+<td>Give every one of 40 sound waves the sound class SC_Effects and the attenuation ATT_Short, save, say how many changed</td>
+<td>hidden</td>
+<td>2</td>
+<td>2/2</td>
+<td>10</td>
+<td>46 s</td>
+<td>214,648</td>
+<td>3,723</td>
+<td>$0.29</td>
+<td>0</td>
+</tr>
+<tr>
+<td></td>
+<td>available</td>
+<td>2</td>
+<td>2/2</td>
+<td>10.5</td>
+<td>43 s</td>
+<td>209,026</td>
+<td>3,164</td>
+<td>$0.29</td>
+<td>0</td>
+</tr>
+<tr>
+<td>List the 30 animation sequences in a folder shorter than one second</td>
+<td>hidden</td>
+<td>2</td>
+<td>2/2</td>
+<td>3.5</td>
+<td>16 s</td>
+<td>25,899</td>
+<td>1,349</td>
+<td>$0.06</td>
+<td>0</td>
+</tr>
+<tr>
+<td></td>
+<td>available</td>
+<td>2</td>
+<td>2/2</td>
+<td>3.5</td>
+<td>17 s</td>
+<td>25,535</td>
+<td>1,369</td>
+<td>$0.06</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Many calls of a tool that takes one item:</strong> with code mode, the agent tested the 24 probes in one or two scripts
+  of <code class="short">nav.path_test</code> calls instead of 24 direct calls: about a third of the turns, two thirds of the time and of the
+  cost, and half the output. The answer was right in every run: the four probes inside the closed box.</li>
+<li><strong>A tool that takes a list:</strong> in the sound task, the agent read the waves in Python, then changed the 12 wrong ones
+  in one <code class="short">audio.assign</code> call and saved them in one <code class="short">evidence.save_assets</code> call, with or without code mode. The 28
+  waves that were right weren't rewritten.</li>
+<li><strong>Reading only:</strong> in the clip task, the agent read the lengths in Python, in one or two commands, in both setups. The three clips
+  of exactly one second were left out, as they should be.</li>
+<li>The checks read the editor and the files, as for the other tasks: the probes the engine's own path query doesn't
+  reach, each wave's class and attenuation and its file on disk, each clip's length, and that the read-only tasks
+  changed nothing.</li>
+</ul>
+<h2>What it doesn't change</h2>
+<ul>
+<li><strong>Navigation answers are the same.</strong> Without the plugin the agent built a correct navmesh and answered right in both
+  runs, and your undo history survived: the console command it used doesn't clear it. One of those runs took 50
+  seconds and cost less than a run with the plugin. What Agent Toolkit adds there is a steady time with the instruction
+  (31 and 32 seconds, against 50 seconds and almost seven minutes without it), the coverage picture and the island
+  check.</li>
+<li><strong>Your agent has to use it.</strong> Without the quick start's instruction, one navmesh run and one data layer run of two
+  used Python only; that data layer couldn't be undone. Add the instruction from step 4 of the quick start.</li>
+<li><strong>Foliage counts are the same.</strong> Without the plugin the agent planted and counted the forest right in both runs.
+  What Agent Toolkit adds there is undo, speed and a picture of the result.</li>
+<li><strong>Retargeting works without the plugin.</strong> Epic's Python makes IK rigs, retargeters and batches, and the agent
+  without the plugin retargeted the clips right in both runs. What Agent Toolkit adds there is speed, the side-by-side
+  picture and the check of every clip.</li>
+<li><strong>Data layers work without the plugin.</strong> Epic's Python has a data layer API, and the agent without the plugin made
+  the layer, filled it and saved it right in both runs, cheaper than with the plugin: $0.18 against $0.27
+  API-equivalent with the instruction. What Agent Toolkit adds there is undo: Ctrl+Z took the change back in both runs with the instruction,
+  and in neither run without the plugin.</li>
+<li><strong>Packaging can work without the plugin.</strong> Epic's UAT runs from the editor's Python: one run without the plugin
+  packaged the project and started the game that way, for $0.24 API-equivalent; the other stopped when its first shell command was
+  refused. A run with the plugin and the instruction cost about $0.49: many of its calls asked the build job for its
+  state while it ran (22 of 31 in one run, 12 of 27 in the other). What Agent Toolkit adds there is the job, the check
+  of every file the package needs and a launch check that leaves nothing running.</li>
+<li><strong>The sample is small:</strong> sixteen tasks, two runs each, one model, Unreal Engine 5.8.4 and one machine. Every new
+  domain adds its own tasks to this chapter.</li>
+</ul>
+<h2>Measuring keeps the toolkit honest</h2>
+<p>Measuring also caught a bug in Agent Toolkit itself: its images were darker than the viewport. Unreal's scene
+capture writes linear colour, and the toolkit saved it without converting it to sRGB.</p>
+<p>After the fix, an evidence image of the test level is within 0.04 of the viewport's own screenshot, and an automated
+test keeps it there. The results above were measured with the fix.</p>
+<p>Earlier landscape and foliage runs caught three more:</p>
+<ul>
+<li><strong>Half-buried trees.</strong> The engine's cone has its pivot at its centre. Painted foliage sits on its pivot, so every
+  agent, with or without the plugin, found the trees half under the ground and raised them by hand, and with the
+  instruction that took 36 to 68 turns. <code class="short">foliage.paint</code> now raises each instance by the mesh's pivot height above its
+  base times its scale; in this pass the task took 9 turns in both runs with the instruction.</li>
+<li><strong>Clearing an empty area</strong> claimed a change it hadn't made, and the toolkit's own undo check failed it. It now
+  answers that there is nothing to remove.</li>
+<li><strong>Roads with a bend</strong> had a sharp kink at the middle point, seen in the tutorial's picture: the toolkit turned the
+  spline's points in a different order from the editor's own spline tool. It now follows the editor's order.</li>
+</ul></section></body></html>
